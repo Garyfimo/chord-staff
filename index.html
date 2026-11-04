@@ -1623,7 +1623,7 @@
     }
     return system.content;
   }
-  const PIANO_STAFF_GAP = 64; // vertical gap between treble bottom line and bass top line (px)
+  const PIANO_STAFF_GAP = 72; // vertical gap between treble bottom line and bass top line (px)
   function staffFrames(system) {
     const frames = [{ staff: 'treble', clef: 'treble', contentKey: 'content', topY: STAFF.topY, bottomY: STAFF.bottomY, labelY: STAFF.labelY }];
     if (system.kind === 'piano') {
@@ -1648,15 +1648,37 @@
     const sw = slotWidth(slots);
     const rx = STAFF.W - STAFF.rightMargin;
 
-    // Brace for piano: a thick vertical join between the two staves
-    if (system.kind === 'piano') {
-      const top = frames[0].topY;
-      const bot = frames[1].bottomY;
-      const bx = STAFF.leftMargin - 14;
-      svg.appendChild(el('path', {
-        d: 'M' + bx + ' ' + top + ' Q' + (bx - 10) + ' ' + ((top + bot) / 2) + ' ' + bx + ' ' + bot,
-        fill: 'none', stroke: 'var(--staff)', 'stroke-width': 3, 'stroke-linecap': 'round',
+    const isPiano = system.kind === 'piano';
+    const systemTop = frames[0].topY;
+    const systemBot = frames[frames.length - 1].bottomY;
+
+    // Piano grand-staff: proper engraved brace + continuous left barline + spanning measure bars
+    if (isPiano) {
+      // Brace glyph (U+1D114) sized to span both staves
+      const braceH = systemBot - systemTop;
+      svg.appendChild(el('text', {
+        x: STAFF.leftMargin - 16,
+        y: (systemTop + systemBot) / 2,
+        'font-family': 'var(--f-music)',
+        'font-size': braceH * 1.08,
+        fill: 'var(--staff)',
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central',
+      }, '𝄔'));
+      // Single systemic left barline spanning both staves
+      svg.appendChild(el('line', {
+        x1: STAFF.leftMargin - 6, y1: systemTop,
+        x2: STAFF.leftMargin - 6, y2: systemBot,
+        stroke: 'var(--staff)', 'stroke-width': 1.5,
       }));
+      // Measure bars span both staves
+      for (let i = 1; i < slots; i++) {
+        const x = playLeft + sw * i;
+        svg.appendChild(el('line', { x1: x, y1: systemTop, x2: x, y2: systemBot, stroke: 'var(--staff)', 'stroke-width': 0.9, opacity: 0.55 }));
+      }
+      // End-of-system double bar spans both staves
+      svg.appendChild(el('line', { x1: rx - 5, y1: systemTop, x2: rx - 5, y2: systemBot, stroke: 'var(--staff)', 'stroke-width': 1.1 }));
+      svg.appendChild(el('line', { x1: rx, y1: systemTop, x2: rx, y2: systemBot, stroke: 'var(--staff)', 'stroke-width': 2 }));
     }
 
     frames.forEach(function (f) {
@@ -1665,21 +1687,25 @@
         const y = f.topY + i * STAFF.spacing;
         svg.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: y, x2: rx, y2: y, stroke: 'var(--staff)', 'stroke-width': 1.15 }));
       }
-      // Left bar
-      svg.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.5 }));
+      // Left bar + measure/end bars drawn per-staff only for single-staff systems;
+      // piano grand staff draws these once across both staves above.
+      if (!isPiano) {
+        svg.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.5 }));
+      }
       // Clef glyph
       const cfg = CLEFS[f.clef];
       svg.appendChild(el('text', { x: 8, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'var(--f-music)', 'font-size': cfg.glyphFontSize, fill: 'var(--staff)' }, cfg.glyph));
       drawKeySignature(svg, state.key, { startX: STAFF.leftMargin, bottomY: f.bottomY, clef: f.clef });
       drawTimeSignature(svg, system.time || '4/4', { topY: f.topY, bottomY: f.bottomY });
 
-      // Measure bars
-      for (let i = 1; i < slots; i++) {
-        const x = playLeft + sw * i;
-        svg.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 0.9, opacity: 0.55 }));
+      if (!isPiano) {
+        for (let i = 1; i < slots; i++) {
+          const x = playLeft + sw * i;
+          svg.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 0.9, opacity: 0.55 }));
+        }
+        svg.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.1 }));
+        svg.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 2 }));
       }
-      svg.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.1 }));
-      svg.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 2 }));
 
       // Measure numbers (only on treble)
       if (f.staff === 'treble') {
@@ -2275,13 +2301,24 @@
     const sw = slotWidth(sys.slots);
     const rx = STAFF.W - STAFF.rightMargin;
 
-    if (sys.kind === 'piano') {
-      const top = frames[0].topY, bot = frames[1].bottomY;
-      const bx = STAFF.leftMargin - 14;
-      g.appendChild(el('path', {
-        d: 'M' + bx + ' ' + top + ' Q' + (bx - 10) + ' ' + ((top + bot) / 2) + ' ' + bx + ' ' + bot,
-        fill: 'none', stroke: colors.staff, 'stroke-width': 3, 'stroke-linecap': 'round',
-      }));
+    const isPianoE = sys.kind === 'piano';
+    const systemTopE = frames[0].topY;
+    const systemBotE = frames[frames.length - 1].bottomY;
+    if (isPianoE) {
+      const h = systemBotE - systemTopE;
+      g.appendChild(el('text', {
+        x: STAFF.leftMargin - 16, y: (systemTopE + systemBotE) / 2,
+        'font-family': 'Noto Music, Bravura, Segoe UI Symbol, serif',
+        'font-size': h * 1.08, fill: colors.staff,
+        'text-anchor': 'middle', 'dominant-baseline': 'central',
+      }, '𝄔'));
+      g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: systemTopE, x2: STAFF.leftMargin - 6, y2: systemBotE, stroke: colors.staff, 'stroke-width': 1.5 }));
+      for (let i = 1; i < sys.slots; i++) {
+        const x = playLeft + sw * i;
+        g.appendChild(el('line', { x1: x, y1: systemTopE, x2: x, y2: systemBotE, stroke: colors.staff, 'stroke-width': 0.9, opacity: 0.55 }));
+      }
+      g.appendChild(el('line', { x1: rx - 5, y1: systemTopE, x2: rx - 5, y2: systemBotE, stroke: colors.staff, 'stroke-width': 1.1 }));
+      g.appendChild(el('line', { x1: rx, y1: systemTopE, x2: rx, y2: systemBotE, stroke: colors.staff, 'stroke-width': 2 }));
     }
 
     frames.forEach(function (f) {
@@ -2289,17 +2326,21 @@
         const y = f.topY + i * STAFF.spacing;
         g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: y, x2: rx, y2: y, stroke: colors.staff, 'stroke-width': 1.15 }));
       }
-      g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.5 }));
+      if (!isPianoE) {
+        g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.5 }));
+      }
       const cfg = CLEFS[f.clef];
       g.appendChild(el('text', { x: 8, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'Noto Music, Bravura, Segoe UI Symbol, serif', 'font-size': cfg.glyphFontSize, fill: colors.staff }, cfg.glyph));
       drawKeySignature(g, state.key, { startX: STAFF.leftMargin, bottomY: f.bottomY, clef: f.clef, colorInk: colors.staff });
       drawTimeSignature(g, sys.time || '4/4', { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
-      for (let i = 1; i < sys.slots; i++) {
-        const x = playLeft + sw * i;
-        g.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 0.9, opacity: 0.55 }));
+      if (!isPianoE) {
+        for (let i = 1; i < sys.slots; i++) {
+          const x = playLeft + sw * i;
+          g.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 0.9, opacity: 0.55 }));
+        }
+        g.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.1 }));
+        g.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 2 }));
       }
-      g.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.1 }));
-      g.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 2 }));
       if (f.staff === 'treble') {
         for (let i = 0; i < sys.slots; i++) {
           const x = playLeft + sw * i + 4;
