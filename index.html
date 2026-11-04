@@ -184,16 +184,22 @@
     gap: 4px;
     align-items: center;
   }
-  .toolbar-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: 1px solid var(--rule);
-    border-radius: 7px;
-    background: color-mix(in oklab, var(--paper) 94%, var(--rule));
+  .dropdown { position: relative; display: inline-block; }
+  .dropdown-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+    min-width: 170px; padding: 4px 0;
+    background: var(--paper); border: 1px solid var(--rule); border-radius: 7px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.14);
   }
-  .toolbar-group .btn { padding: 6px 10px; font-size: 12px; }
+  .dropdown-item {
+    display: block; width: 100%; text-align: left;
+    padding: 8px 14px; border: 0; background: none; cursor: pointer;
+    font-family: var(--f-body); font-size: 13px; color: var(--ink);
+  }
+  .dropdown-item:hover, .dropdown-item:focus-visible {
+    background: var(--accent-wash); color: var(--accent); outline: none;
+  }
+  .dropdown-toggle::after { content: " \25BE"; opacity: 0.6; margin-left: 4px; }
   .modifier-group .label {
     font-size: 11px;
     letter-spacing: 0.14em;
@@ -897,7 +903,7 @@
   .session-banner .peers { color: var(--ink-mid); font-size: 12px; }
 
   /* Student restrictions: hide editing toolbar + disable staff clicks */
-  body[data-role="student"] .toolbar .btn:not(#btn-download):not(#btn-copy),
+  body[data-role="student"] .toolbar .btn:not(#btn-file-menu),
   body[data-role="student"] .toolbar .stepper,
   body[data-role="student"] .toolbar-spacer,
   body[data-role="student"] .mode-bar,
@@ -908,7 +914,7 @@
   body[data-role="student"] .system-head .remove-system,
   body[data-role="student"] .fifths-panel,
   body[data-role="student"] #template-name { pointer-events: none; }
-  body[data-role="student"] .toolbar .btn:not(#btn-download):not(#btn-copy),
+  body[data-role="student"] .toolbar .btn:not(#btn-file-menu),
   body[data-role="student"] .toolbar .stepper,
   body[data-role="student"] .toolbar-spacer,
   body[data-role="student"] .mode-bar,
@@ -916,7 +922,9 @@
   body[data-role="student"] .add-system-row,
   body[data-role="student"] .system-head .stepper,
   body[data-role="student"] .system-head .time-select,
-  body[data-role="student"] .system-head .remove-system { display: none !important; }
+  body[data-role="student"] .system-head .remove-system,
+  body[data-role="student"] #btn-export-json,
+  body[data-role="student"] #btn-import-json { display: none !important; }
   body[data-role="student"] .slot-target { pointer-events: none !important; cursor: default; }
   body[data-role="student"] #template-name { opacity: 0.85; }
 </style>
@@ -996,11 +1004,14 @@
 
 <div class="toolbar">
   <button class="btn primary play" id="btn-play" aria-label="Play all lines"><span class="glyph" aria-hidden="true"></span><span id="btn-play-label">Play</span></button>
-  <div class="toolbar-group" aria-label="Save and share">
-    <button class="btn" id="btn-download">Save as PNG</button>
-    <button class="btn" id="btn-copy">Copy image</button>
-    <button class="btn" id="btn-export-json">Export JSON</button>
-    <button class="btn" id="btn-import-json">Import JSON</button>
+  <div class="dropdown" id="file-dropdown">
+    <button class="btn dropdown-toggle" id="btn-file-menu" aria-haspopup="menu" aria-expanded="false">File</button>
+    <div class="dropdown-menu" id="file-menu" role="menu" hidden>
+      <button class="dropdown-item" id="btn-download" role="menuitem">Save as PNG</button>
+      <button class="dropdown-item" id="btn-copy" role="menuitem">Copy image</button>
+      <button class="dropdown-item" id="btn-export-json" role="menuitem">Export JSON</button>
+      <button class="dropdown-item" id="btn-import-json" role="menuitem">Import JSON</button>
+    </div>
   </div>
   <input type="file" id="json-file-input" accept="application/json,.json" hidden />
   <label class="time-select" for="instrument-select" style="display:inline-flex; align-items:center; gap:6px;">
@@ -2900,6 +2911,29 @@
     reader.onerror = function () { showToast('Could not read file'); };
     reader.readAsText(file);
   });
+
+  // --- File dropdown ---
+  (function () {
+    const toggle = document.getElementById('btn-file-menu');
+    const menu = document.getElementById('file-menu');
+    const dd = document.getElementById('file-dropdown');
+    function close() { menu.hidden = true; toggle.setAttribute('aria-expanded', 'false'); }
+    function open() { menu.hidden = false; toggle.setAttribute('aria-expanded', 'true'); }
+    toggle.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (menu.hidden) open(); else close();
+    });
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !dd.contains(e.target)) close();
+    });
+    menu.addEventListener('click', function (e) {
+      // Close after selecting an item (click bubbles up to menu after item handler runs)
+      if (e.target.closest('.dropdown-item')) close();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !menu.hidden) { close(); toggle.focus(); }
+    });
+  })();
 
   // --- Instrument picker (session only) ---
   const instrumentSelect = document.getElementById('instrument-select');
