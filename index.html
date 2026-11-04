@@ -3059,6 +3059,13 @@
     const codeInput = document.getElementById('gate-code-input');
     function setErr(msg) { errEl.textContent = msg || ' '; }
     function closeGate() { gate.style.display = 'none'; }
+    function openGate() {
+      gate.style.display = '';
+      setErr('');
+      codeInput.value = '';
+      teacherBtn.disabled = !fbReady;
+      studentBtn.disabled = !fbReady;
+    }
     if (!fbReady) {
       teacherBtn.disabled = true;
       studentBtn.disabled = true;
@@ -3104,6 +3111,7 @@
     document.getElementById('session-leave-btn').addEventListener('click', function () {
       remote.leave();
       showToast('Left session');
+      openGate();
     });
   })();
 
