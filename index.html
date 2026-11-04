@@ -1315,6 +1315,13 @@
     }
     return result;
   }
+  function noteLabel(n) {
+    const acc = n.accidental === 1 ? '♯' : n.accidental === -1 ? '♭' : n.accidental === 2 ? '𝄪' : n.accidental === -2 ? '𝄫' : '';
+    return n.letter + acc;
+  }
+  function noteLabels(notes) {
+    return (notes || []).slice().sort(function (a, b) { return (a.position || 0) - (b.position || 0); }).map(noteLabel).join(' ');
+  }
   function expandNote(n, clef) {
     clef = clef || 'treble';
     const abs = CLEFS[clef].base + n.position;
@@ -1786,7 +1793,8 @@
                 duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'notes') {
-              drawNotesCluster(svg, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, {
+              const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
+              drawNotesCluster(svg, expanded, cx, noteLabels(expanded), {
                 duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'rest') {
@@ -2541,7 +2549,8 @@
           if (e.kind === 'chord') {
             drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'notes') {
-            drawNotesCluster(g, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+            const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
+            drawNotesCluster(g, expanded, cx, noteLabels(expanded), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'rest') {
             drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
           }
