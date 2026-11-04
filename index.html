@@ -2422,15 +2422,12 @@
   const btnPlay = document.getElementById('btn-play');
   const btnPlayLabel = document.getElementById('btn-play-label');
   function setPlayingSlot(sysIdx, slotIdx, evtIdx, staff) {
-    if (sysIdx == null) {
-      document.querySelectorAll('.slot-target[data-playing]').forEach(function (el) { el.removeAttribute('data-playing'); });
-      return;
-    }
+    // Only one highlight at a time — clear every existing one across all systems/staves first.
+    document.querySelectorAll('.slot-target[data-playing]').forEach(function (el) { el.removeAttribute('data-playing'); });
+    if (sysIdx == null) return;
     const svg = document.querySelector('svg.staff[data-system="' + sysIdx + '"]');
     if (!svg) return;
-    // Clear only highlights on the same staff of the same system (keeps other staff's current highlight intact)
     const staffSel = staff ? '[data-staff="' + staff + '"]' : '';
-    svg.querySelectorAll('.slot-target[data-playing]' + staffSel).forEach(function (el) { el.removeAttribute('data-playing'); });
     let sel = null;
     if (evtIdx != null) {
       sel = svg.querySelector('.slot-target[data-slot="' + slotIdx + '"][data-event="' + evtIdx + '"]' + staffSel);
