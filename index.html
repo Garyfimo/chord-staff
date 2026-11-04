@@ -990,6 +990,9 @@
   <button class="btn" id="btn-export-json">Export JSON</button>
   <button class="btn" id="btn-import-json">Import JSON</button>
   <input type="file" id="json-file-input" accept="application/json,.json" hidden />
+  <button class="btn" id="btn-upload-sound" title="Use your own audio sample as the instrument (session only)">Upload sound</button>
+  <button class="btn" id="btn-reset-sound" hidden title="Return to the default synth piano">Reset sound</button>
+  <input type="file" id="sound-file-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" hidden />
   <button class="btn danger" id="btn-clear">Clear all</button>
   <div class="toolbar-spacer"></div>
   <div class="stepper">
@@ -1783,14 +1786,25 @@
   }
 
   // --- Audio ---
-  function noteFrequency(note) {
+  function noteMidi(note) {
     const letterIdx = LETTERS.indexOf(note.letter);
     const pitchClass = ((LETTER_PITCHES[letterIdx] + note.accidental) % 12 + 12) % 12;
-    const midi = 12 * (note.octave + 1) + pitchClass;
-    return 440 * Math.pow(2, (midi - 69) / 12);
+    return 12 * (note.octave + 1) + pitchClass;
   }
+  function noteFrequency(note) { return 440 * Math.pow(2, (noteMidi(note) - 69) / 12); }
   const synth = {
     ctx: null, active: [],
+    sample: null, sampleName: null, sampleBaseMidi: 60, // middle C (C4)
+    hasSample: function () { return !!this.sample; },
+    loadSample: async function (file) {
+      const ctx = this.ensure();
+      if (!ctx) throw new Error('Audio unavailable');
+      const arr = await file.arrayBuffer();
+      const buf = await ctx.decodeAudioData(arr.slice(0));
+      this.sample = buf;
+      this.sampleName = file.name;
+    },
+    clearSample: function () { this.sample = null; this.sampleName = null; },
     ensure: function () {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
@@ -1811,6 +1825,30 @@
       const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 7000; tone.Q.value = 0.3;
       master.connect(tone).connect(ctx.destination);
       const self = this;
+
+      // If a custom sample is loaded, use it (pitch-shifted per note) instead of the synth voice
+      if (this.sample) {
+        const buf = this.sample;
+        const baseMidi = this.sampleBaseMidi;
+        notes.forEach(function (note) {
+          const midi = noteMidi(note);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.playbackRate.value = Math.pow(2, (midi - baseMidi) / 12);
+          const g = ctx.createGain();
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(1.0, t0 + 0.004);
+          // Hold until key-release, then short exponential fade
+          g.gain.setValueAtTime(1.0, Math.max(t0 + 0.004, endT - 0.001));
+          g.gain.exponentialRampToValueAtTime(0.0001, endT + 0.12);
+          src.connect(g).connect(master);
+          src.start(t0);
+          src.stop(endT + 0.15);
+          self.active.push(src);
+        });
+        return;
+      }
+
       // Piano-like additive synth: 6 sine partials per note, each with pitch-scaled exponential decay.
       // A short bandpass-noise burst at onset acts as the hammer strike. setTargetAtTime does the natural
       // ringing decay; a second setTargetAtTime at note-end applies a damper-like release.
@@ -2765,6 +2803,38 @@
     reader.onerror = function () { showToast('Could not read file'); };
     reader.readAsText(file);
   });
+
+  // --- Custom instrument sample (session only) ---
+  const soundFileInput = document.getElementById('sound-file-input');
+  const btnUploadSound = document.getElementById('btn-upload-sound');
+  const btnResetSound = document.getElementById('btn-reset-sound');
+  function refreshSoundButtons() {
+    const on = synth.hasSample();
+    btnUploadSound.textContent = on ? ('Sound: ' + (synth.sampleName || 'custom')) : 'Upload sound';
+    btnResetSound.hidden = !on;
+  }
+  btnUploadSound.addEventListener('click', function () {
+    soundFileInput.value = '';
+    soundFileInput.click();
+  });
+  btnResetSound.addEventListener('click', function () {
+    synth.clearSample();
+    refreshSoundButtons();
+    showToast('Default piano restored');
+  });
+  soundFileInput.addEventListener('change', async function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      if (player.playing) player.stop();
+      await synth.loadSample(file);
+      refreshSoundButtons();
+      showToast('Custom sound loaded (treated as middle C)');
+    } catch (err) {
+      showToast('Could not decode audio file');
+    }
+  });
+  refreshSoundButtons();
 
   document.getElementById('btn-close-export').addEventListener('click', function () {
     document.getElementById('export-modal').classList.remove('open');
