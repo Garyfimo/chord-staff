@@ -1319,6 +1319,19 @@
     const acc = n.accidental === 1 ? '♯' : n.accidental === -1 ? '♭' : n.accidental === 2 ? '𝄪' : n.accidental === -2 ? '𝄫' : '';
     return n.letter + acc;
   }
+  function letterAtPosition(position, clef) {
+    const abs = CLEFS[clef || 'treble'].base + position;
+    const letterIdx = ((abs % 7) + 7) % 7;
+    return LETTERS[letterIdx];
+  }
+  // When the user hasn't picked a sharp/flat explicitly (Natural = 0), inherit the key signature's
+  // accidental for the note's letter — so e.g. placing on the F line in G major gives F♯ by default.
+  function effectiveAccidental(letter, selectedAcc, key) {
+    if (selectedAcc !== 0) return selectedAcc;
+    const accs = keySignatureAccidentals(key);
+    const ks = accs.find(function (a) { return a.letter === letter; });
+    return ks ? ks.accidental : 0;
+  }
   function noteLabels(notes) {
     return (notes || []).slice().sort(function (a, b) { return (a.position || 0) - (b.position || 0); }).map(noteLabel).join(' ');
   }
@@ -2171,18 +2184,21 @@
         const content = systemContent(sys, staff);
         const events = measureEvents(content[slot]).slice();
         const defaultPos = 6;
+        const kbClef = staff === 'bass' ? 'bass' : 'treble';
+        const kbLetter = letterAtPosition(defaultPos, kbClef);
+        const kbAcc = effectiveAccidental(kbLetter, state.accidental, state.key);
         if (evtIdx == null || !events[evtIdx] || events[evtIdx].kind !== 'notes') {
           const mBeats = measureBeats(parseTime(sys.time));
           const remaining = mBeats - usedBeats(events);
           if (remaining <= 0) { showToast('Measure is full'); return; }
           const dur = fitDurationToMeasure(state.duration, remaining);
-          events.push({ kind: 'notes', notes: [{ position: defaultPos, accidental: state.accidental }], duration: dur });
+          events.push({ kind: 'notes', notes: [{ position: defaultPos, accidental: kbAcc }], duration: dur });
         } else {
           const evt = Object.assign({}, events[evtIdx]);
           const notes = (evt.notes || []).slice();
           const idx = notes.findIndex(function (n) { return n.position === defaultPos; });
           if (idx >= 0) notes.splice(idx, 1);
-          else notes.push({ position: defaultPos, accidental: state.accidental });
+          else notes.push({ position: defaultPos, accidental: kbAcc });
           if (notes.length === 0) { events.splice(evtIdx, 1); }
           else { evt.notes = notes; events[evtIdx] = evt; }
         }
@@ -2644,11 +2660,13 @@
     const mBeats = measureBeats(parseTime(sys.time));
     let addedNote = null;
 
+    const placedLetter = letterAtPosition(position, frame.clef);
+    const placedAcc = effectiveAccidental(placedLetter, state.accidental, state.key);
     if (evtIdx == null) {
       const remaining = mBeats - usedBeats(events);
       if (remaining <= 0) { showToast('Measure is full'); return; }
       const dur = fitDurationToMeasure(state.duration, remaining);
-      const noteRec = { position: position, accidental: state.accidental };
+      const noteRec = { position: position, accidental: placedAcc };
       events.push({ kind: 'notes', notes: [noteRec], duration: dur });
       addedNote = noteRec;
     } else {
@@ -2665,10 +2683,10 @@
       }
       const idx = notes.findIndex(function (n) { return n.position === position; });
       if (idx >= 0) {
-        if ((notes[idx].accidental || 0) === state.accidental) notes.splice(idx, 1);
-        else { notes[idx] = { position: position, accidental: state.accidental }; addedNote = notes[idx]; }
+        if ((notes[idx].accidental || 0) === placedAcc) notes.splice(idx, 1);
+        else { notes[idx] = { position: position, accidental: placedAcc }; addedNote = notes[idx]; }
       } else {
-        const noteRec = { position: position, accidental: state.accidental };
+        const noteRec = { position: position, accidental: placedAcc };
         notes.push(noteRec);
         addedNote = noteRec;
       }
