@@ -979,6 +979,7 @@
   <div class="mode-toggle" role="group" aria-label="Edit mode">
     <button type="button" id="mode-chord" aria-pressed="true">Chords</button>
     <button type="button" id="mode-notes" aria-pressed="false">Notes</button>
+    <button type="button" id="mode-rests" aria-pressed="false">Rests</button>
   </div>
   <div class="modifier-group" aria-label="Note duration">
     <span class="label">Duration</span>
@@ -1410,7 +1411,7 @@
       const parsed = JSON.parse(saved);
       if (typeof parsed.name === 'string') state.name = parsed.name;
       if (typeof parsed.tempo === 'number') state.tempo = parsed.tempo;
-      if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
+      if (parsed.mode === 'chord' || parsed.mode === 'notes' || parsed.mode === 'rests') state.mode = parsed.mode;
       if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
       if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
       if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
@@ -1636,6 +1637,23 @@
     }
   }
 
+  const REST_GLYPHS = { whole: '𝄻', half: '𝄼', quarter: '𝄽', eighth: '𝄾' };
+  function drawRest(svg, cx, durationId, opts) {
+    opts = opts || {};
+    const topY = opts.topY != null ? opts.topY : STAFF.topY;
+    const bottomY = opts.bottomY != null ? opts.bottomY : STAFF.bottomY;
+    const colorInk = opts.colorInk || 'var(--staff)';
+    const midY = (topY + bottomY) / 2;
+    const size = Math.max(26, (bottomY - topY) * 0.95);
+    const glyph = REST_GLYPHS[durationId] || REST_GLYPHS.quarter;
+    svg.appendChild(el('text', {
+      x: cx, y: midY + size * 0.12,
+      'text-anchor': 'middle',
+      'font-family': opts.fontFamily || 'var(--f-music)',
+      'font-size': size,
+      fill: colorInk,
+    }, glyph));
+  }
   function drawKeySignature(svg, key, opts) {
     opts = opts || {};
     const spacing = opts.spacing || STAFF.spacing;
@@ -1771,6 +1789,8 @@
               drawNotesCluster(svg, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, {
                 duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
+            } else if (e.kind === 'rest') {
+              drawRest(svg, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY });
             }
           });
         }
@@ -2122,6 +2142,7 @@
       const evtIdx = evtAttr === 'new' ? null : parseInt(evtAttr, 10);
       const staff = target.getAttribute('data-staff') || 'treble';
       if (state.mode === 'chord') handleChordClick(sIdx, slot, evtIdx, staff);
+      else if (state.mode === 'rests') handleRestClick(sIdx, slot, evtIdx, staff);
       else handleNoteClick(sIdx, slot, evtIdx, e, svg, staff);
     });
     svg.addEventListener('keydown', function (e) {
@@ -2135,6 +2156,7 @@
       const evtIdx = evtAttr === 'new' ? null : parseInt(evtAttr, 10);
       const staff = target.getAttribute('data-staff') || 'treble';
       if (state.mode === 'chord') handleChordClick(sIdx, slot, evtIdx, staff);
+      else if (state.mode === 'rests') handleRestClick(sIdx, slot, evtIdx, staff);
       else {
         // Keyboard: place/toggle middle-of-staff note in a note event (new or edit existing)
         const sys = state.systems[sIdx];
@@ -2180,9 +2202,12 @@
     document.body.setAttribute('data-mode', state.mode);
     document.getElementById('mode-chord').setAttribute('aria-pressed', state.mode === 'chord' ? 'true' : 'false');
     document.getElementById('mode-notes').setAttribute('aria-pressed', state.mode === 'notes' ? 'true' : 'false');
+    document.getElementById('mode-rests').setAttribute('aria-pressed', state.mode === 'rests' ? 'true' : 'false');
     document.getElementById('accidentals-wrap').hidden = state.mode !== 'notes';
     document.getElementById('mode-hint').textContent = state.mode === 'chord'
       ? 'Click a measure to place a chord — the current duration applies.'
+      : state.mode === 'rests'
+      ? 'Click a measure to place a rest — the current duration applies. Click a rest to remove it.'
       : 'Click the staff to place a notehead at the nearest line or space. Click again to remove.';
     document.querySelectorAll('.modifier-group [data-acc]').forEach(function (b) {
       b.setAttribute('aria-pressed', parseInt(b.getAttribute('data-acc'), 10) === state.accidental ? 'true' : 'false');
@@ -2220,6 +2245,31 @@
         ? { root: evt.root, quality: evt.quality, duration: eventDuration(evt) }
         : { root: 'C', quality: '', duration: eventDuration(evt) }, staff);
     }
+  }
+
+  function handleRestClick(sysIdx, slot, evtIdx, staff) {
+    staff = staff || 'treble';
+    const sys = state.systems[sysIdx];
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[slot]).slice();
+    if (evtIdx != null) {
+      // Click an existing event in rests mode → if it's a rest, remove; else convert to a rest of same duration
+      const evt = events[evtIdx];
+      if (!evt) return;
+      if (evt.kind === 'rest') {
+        events.splice(evtIdx, 1);
+      } else {
+        events[evtIdx] = { kind: 'rest', duration: eventDuration(evt) };
+      }
+    } else {
+      const mBeats = measureBeats(parseTime(sys.time));
+      const remaining = mBeats - usedBeats(events);
+      if (remaining <= 0) { showToast('Measure is full'); return; }
+      const dur = fitDurationToMeasure(state.duration, remaining);
+      events.push({ kind: 'rest', duration: dur });
+    }
+    setMeasureIn(content, slot, events);
+    save(); renderAll();
   }
 
   function openPicker(sysIdx, slot, evtIdx, seed, staff) {
@@ -2492,6 +2542,8 @@
             drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'notes') {
             drawNotesCluster(g, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+          } else if (e.kind === 'rest') {
+            drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
           }
         });
       }
@@ -2771,6 +2823,10 @@
     if (state.mode === 'notes') return;
     state.mode = 'notes'; save(); renderAll();
   });
+  document.getElementById('mode-rests').addEventListener('click', function () {
+    if (state.mode === 'rests') return;
+    state.mode = 'rests'; save(); renderAll();
+  });
   document.querySelectorAll('.modifier-group [data-acc]').forEach(function (b) {
     b.addEventListener('click', function () {
       state.accidental = parseInt(b.getAttribute('data-acc'), 10); save(); renderAll();
@@ -2840,7 +2896,7 @@
     if (!parsed || typeof parsed !== 'object') throw new Error('Not a chord-staff file');
     if (typeof parsed.name === 'string') state.name = parsed.name;
     if (typeof parsed.tempo === 'number') state.tempo = parsed.tempo;
-    if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
+    if (parsed.mode === 'chord' || parsed.mode === 'notes' || parsed.mode === 'rests') state.mode = parsed.mode;
     if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
     if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
     if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
