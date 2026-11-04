@@ -178,11 +178,22 @@
   .mode-toggle button + button { border-left: 1px solid var(--rule); }
   .mode-toggle button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 
+  [hidden] { display: none !important; }
   .modifier-group {
     display: inline-flex;
     gap: 4px;
     align-items: center;
   }
+  .toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: 1px solid var(--rule);
+    border-radius: 7px;
+    background: color-mix(in oklab, var(--paper) 94%, var(--rule));
+  }
+  .toolbar-group .btn { padding: 6px 10px; font-size: 12px; }
   .modifier-group .label {
     font-size: 11px;
     letter-spacing: 0.14em;
@@ -985,10 +996,12 @@
 
 <div class="toolbar">
   <button class="btn primary play" id="btn-play" aria-label="Play all lines"><span class="glyph" aria-hidden="true"></span><span id="btn-play-label">Play</span></button>
-  <button class="btn" id="btn-download">Save as PNG</button>
-  <button class="btn" id="btn-copy">Copy image</button>
-  <button class="btn" id="btn-export-json">Export JSON</button>
-  <button class="btn" id="btn-import-json">Import JSON</button>
+  <div class="toolbar-group" aria-label="Save and share">
+    <button class="btn" id="btn-download">Save as PNG</button>
+    <button class="btn" id="btn-copy">Copy image</button>
+    <button class="btn" id="btn-export-json">Export JSON</button>
+    <button class="btn" id="btn-import-json">Import JSON</button>
+  </div>
   <input type="file" id="json-file-input" accept="application/json,.json" hidden />
   <label class="time-select" for="instrument-select" style="display:inline-flex; align-items:center; gap:6px;">
     <span>Instrument</span>
