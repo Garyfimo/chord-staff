@@ -1652,19 +1652,8 @@
     const systemTop = frames[0].topY;
     const systemBot = frames[frames.length - 1].bottomY;
 
-    // Piano grand-staff: proper engraved brace + continuous left barline + spanning measure bars
+    // Piano grand-staff: continuous left barline + spanning measure bars (no brace glyph)
     if (isPiano) {
-      // Brace glyph (U+1D114) sized to span both staves
-      const braceH = systemBot - systemTop;
-      svg.appendChild(el('text', {
-        x: STAFF.leftMargin - 16,
-        y: (systemTop + systemBot) / 2,
-        'font-family': 'var(--f-music)',
-        'font-size': braceH * 1.08,
-        fill: 'var(--staff)',
-        'text-anchor': 'middle',
-        'dominant-baseline': 'central',
-      }, '𝄔'));
       // Single systemic left barline spanning both staves
       svg.appendChild(el('line', {
         x1: STAFF.leftMargin - 6, y1: systemTop,
@@ -2305,13 +2294,6 @@
     const systemTopE = frames[0].topY;
     const systemBotE = frames[frames.length - 1].bottomY;
     if (isPianoE) {
-      const h = systemBotE - systemTopE;
-      g.appendChild(el('text', {
-        x: STAFF.leftMargin - 16, y: (systemTopE + systemBotE) / 2,
-        'font-family': 'Noto Music, Bravura, Segoe UI Symbol, serif',
-        'font-size': h * 1.08, fill: colors.staff,
-        'text-anchor': 'middle', 'dominant-baseline': 'central',
-      }, '𝄔'));
       g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: systemTopE, x2: STAFF.leftMargin - 6, y2: systemBotE, stroke: colors.staff, 'stroke-width': 1.5 }));
       for (let i = 1; i < sys.slots; i++) {
         const x = playLeft + sw * i;
