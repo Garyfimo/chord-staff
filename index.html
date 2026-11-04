@@ -2551,10 +2551,15 @@
   });
 
   document.getElementById('btn-clear').addEventListener('click', function () {
-    const hasAny = state.systems.some(function (s) { return Object.keys(s.content).length > 0; });
+    const hasAny = state.systems.some(function (s) {
+      return Object.keys(s.content).length > 0 || (s.bassContent && Object.keys(s.bassContent).length > 0);
+    });
     if (!hasAny) return;
     if (player.playing) player.stop();
-    state.systems.forEach(function (s) { s.content = {}; });
+    state.systems.forEach(function (s) {
+      s.content = {};
+      if (s.kind === 'piano') s.bassContent = {};
+    });
     save(); renderAll();
     showToast('Cleared');
   });
