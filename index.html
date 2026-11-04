@@ -1,0 +1,2559 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Chord Staff</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=Noto+Music&display=swap">
+<style>
+  /* Design — editorial, music-publication aesthetic.
+     Manuscript paper surface, inked serif chord labels, deep claret accent.
+     Multiple staff systems that play in sequence. Note modifiers: duration + accidental. Key via Circle of Fifths. */
+  :root {
+    --bg: #efe8d6;
+    --paper: #faf4e4;
+    --paper-edge: #e2d7bb;
+    --ink: #1c1711;
+    --ink-mid: #5b4d3e;
+    --ink-soft: #8d7d69;
+    --rule: #c7bba1;
+    --accent: #7a1e26;
+    --accent-ink: #4b0f14;
+    --accent-wash: rgba(122, 30, 38, 0.08);
+    --focus: #35557a;
+    --staff: #231c14;
+    --surface-raise: #ffffff;
+    color-scheme: light;
+    --f-display: "Fraunces", "Hoefler Text", "Baskerville", Georgia, serif;
+    --f-body: "Inter", -apple-system, system-ui, Segoe UI, sans-serif;
+    --f-music: "Noto Music", "Bravura", "Apple Symbols", "Segoe UI Symbol", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #130f0a;
+      --paper: #1d1810;
+      --paper-edge: #29220f;
+      --ink: #efe3cc;
+      --ink-mid: #b4a287;
+      --ink-soft: #7a6a54;
+      --rule: #39301f;
+      --accent: #e39aa1;
+      --accent-ink: #efb4ba;
+      --accent-wash: rgba(227, 154, 161, 0.12);
+      --focus: #8bb0d4;
+      --staff: #efe3cc;
+      --surface-raise: #241e14;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #130f0a;
+    --paper: #1d1810;
+    --paper-edge: #29220f;
+    --ink: #efe3cc;
+    --ink-mid: #b4a287;
+    --ink-soft: #7a6a54;
+    --rule: #39301f;
+    --accent: #e39aa1;
+    --accent-ink: #efb4ba;
+    --accent-wash: rgba(227, 154, 161, 0.12);
+    --focus: #8bb0d4;
+    --staff: #efe3cc;
+    --surface-raise: #241e14;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--f-body); -webkit-font-smoothing: antialiased; }
+  body {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px;
+    max-width: 1080px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  header.masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 14px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .masthead h1 {
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: clamp(28px, 4.5vw, 44px);
+    letter-spacing: -0.015em;
+    margin: 0;
+    font-style: italic;
+    line-height: 1;
+  }
+  .masthead .mark {
+    font-family: var(--f-music);
+    color: var(--accent);
+    font-style: normal;
+    margin-right: 4px;
+  }
+  .tagline {
+    font-family: var(--f-display);
+    font-style: italic;
+    color: var(--ink-mid);
+    font-size: 14px;
+    letter-spacing: 0.01em;
+  }
+  .edition {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+
+  .sheet-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .template-name {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: clamp(18px, 2.2vw, 22px);
+    font-weight: 500;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--rule);
+    color: var(--ink);
+    padding: 4px 2px;
+    flex: 1;
+    min-width: 200px;
+    max-width: 460px;
+  }
+  .template-name:focus { outline: none; border-bottom-color: var(--accent); }
+  .sheet-key {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+  }
+  .sheet-key b { color: var(--ink-mid); font-weight: 600; }
+  .sheet-key .k-value { color: var(--accent); font-weight: 600; font-family: var(--f-display); font-style: italic; text-transform: none; letter-spacing: 0; font-size: 13px; }
+
+  .mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+    row-gap: 10px;
+  }
+  .mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mode-toggle button {
+    padding: 8px 16px;
+    background: var(--paper);
+    border: none;
+    color: var(--ink-mid);
+    font-family: var(--f-body);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s;
+  }
+  .mode-toggle button[aria-pressed="true"] { background: var(--accent); color: #faf4e4; }
+  .mode-toggle button + button { border-left: 1px solid var(--rule); }
+  .mode-toggle button:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+  .modifier-group {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .modifier-group .label {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-mid);
+    margin-right: 6px;
+    font-weight: 500;
+  }
+  .modifier-group button {
+    min-width: 36px; height: 34px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 0 6px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--f-music);
+    font-size: 18px;
+  }
+  .modifier-group button[aria-pressed="true"] {
+    background: var(--accent);
+    color: #faf4e4;
+    border-color: var(--accent);
+  }
+  .modifier-group button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .mode-hint {
+    width: 100%;
+    font-family: var(--f-display);
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-bottom: 10px;
+  }
+
+  /* --- Systems --- */
+  #systems {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .staff-sheet {
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    border-radius: 2px;
+    padding: 14px 18px 20px;
+    box-shadow: 0 1px 0 var(--paper-edge), 0 14px 32px -22px rgba(0,0,0,0.35);
+    position: relative;
+  }
+  .staff-sheet::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(circle at 10% 15%, rgba(255,255,255,0.35) 0%, transparent 50%),
+      radial-gradient(circle at 90% 88%, rgba(0,0,0,0.03) 0%, transparent 45%);
+    pointer-events: none;
+    border-radius: inherit;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .staff-sheet::before {
+      background:
+        radial-gradient(circle at 10% 15%, rgba(255,230,180,0.04) 0%, transparent 50%),
+        radial-gradient(circle at 90% 88%, rgba(0,0,0,0.3) 0%, transparent 45%);
+    }
+  }
+  :root[data-theme="dark"] .staff-sheet::before {
+    background:
+      radial-gradient(circle at 10% 15%, rgba(255,230,180,0.04) 0%, transparent 50%),
+      radial-gradient(circle at 90% 88%, rgba(0,0,0,0.3) 0%, transparent 45%);
+  }
+
+  .system-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 1;
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .system-head .label {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 13px;
+    color: var(--ink-soft);
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+  .system-head .label b { color: var(--ink-mid); font-weight: 600; }
+  .system-head-spacer { flex: 1; min-width: 0; }
+  .btn-tiny {
+    font-family: var(--f-body);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink-soft);
+    cursor: pointer;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: all 0.1s;
+  }
+  .btn-tiny:hover { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 30%, transparent); }
+
+  .time-select {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--ink-mid);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .time-select select {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0;
+    text-transform: none;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    padding: 3px 8px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+  }
+  .time-select select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  .staff-container {
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+    min-width: 0;
+  }
+  svg.staff {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 620px;
+  }
+
+  .slot-target { cursor: pointer; fill: transparent; transition: fill 0.08s linear; }
+  .slot-target:hover { fill: var(--accent-wash); }
+  .slot-target:focus-visible { outline: none; fill: color-mix(in oklab, var(--focus) 10%, transparent); }
+  .slot-target[data-playing="true"] { fill: color-mix(in oklab, var(--accent) 18%, transparent); }
+  body[data-mode="notes"] .slot-target { cursor: crosshair; }
+
+  .btn-add-system {
+    margin-top: 14px;
+    width: 100%;
+    padding: 18px;
+    background: transparent;
+    border: 1.5px dashed var(--rule);
+    color: var(--ink-mid);
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 15px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.15s;
+    font-weight: 500;
+  }
+  .btn-add-system:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .btn-add-system .plus {
+    font-family: var(--f-music);
+    font-style: normal;
+    margin-right: 8px;
+    font-size: 18px;
+    vertical-align: -1px;
+  }
+
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 18px;
+  }
+  .btn {
+    font-family: var(--f-body);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 9px 14px;
+    border-radius: 2px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+  }
+  .btn:hover { background: color-mix(in oklab, var(--ink) 5%, var(--paper)); border-color: var(--ink-soft); }
+  .btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); color: #faf4e4; border-color: var(--accent); }
+  .btn.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+  .btn.ghost { border-color: transparent; color: var(--ink-mid); }
+  .btn.ghost:hover { border-color: var(--rule); color: var(--ink); background: transparent; }
+  .btn.danger { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 35%, transparent); }
+  .btn.danger:hover { background: var(--accent-wash); border-color: var(--accent); }
+
+  .stepper {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--ink-mid);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+  .stepper > span.label { margin-right: 6px; }
+  .stepper button {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    width: 26px; height: 26px;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--ink);
+    font-family: var(--f-body);
+    border-radius: 2px;
+  }
+  .stepper button:hover { border-color: var(--ink-soft); }
+  .stepper .count {
+    padding: 0 8px;
+    font-family: var(--f-body);
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: var(--ink);
+    min-width: 28px;
+    text-align: center;
+  }
+  .toolbar-spacer { flex: 1; min-width: 0; }
+
+  .btn.play {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 16px 9px 14px;
+  }
+  .btn.play .glyph {
+    display: inline-block;
+    width: 0; height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-left: 9px solid currentColor;
+    margin-right: 1px;
+  }
+  .btn.play.playing .glyph {
+    width: 9px; height: 10px;
+    border: none;
+    background:
+      linear-gradient(currentColor, currentColor) left/3px 100% no-repeat,
+      linear-gradient(currentColor, currentColor) right/3px 100% no-repeat;
+  }
+
+  .picker-preview-head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+  .btn-preview-play {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--accent);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .btn-preview-play:hover { background: var(--accent-wash); border-color: var(--accent); }
+  .btn-preview-play:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .btn-preview-play .glyph {
+    display: inline-block;
+    width: 0; height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-left: 7px solid currentColor;
+    margin-left: 2px;
+  }
+
+  .help {
+    margin-top: 22px;
+    padding: 14px 18px;
+    background: var(--paper);
+    border-left: 3px solid var(--accent);
+    font-size: 13px;
+    color: var(--ink-mid);
+    line-height: 1.6;
+    border-radius: 0 2px 2px 0;
+  }
+  .help strong { color: var(--ink); font-family: var(--f-display); font-weight: 600; font-style: italic; letter-spacing: 0.01em; }
+  .help kbd {
+    font-family: var(--f-body);
+    background: var(--surface-raise);
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+    padding: 1px 5px;
+    font-size: 11px;
+    color: var(--ink);
+  }
+
+  .fifths-panel {
+    margin-top: 24px;
+    padding: 22px;
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    border-radius: 3px;
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 28px;
+    align-items: center;
+  }
+  .fifths-head {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.005em;
+    margin: 0 0 4px;
+  }
+  .fifths-sub {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+    margin-bottom: 14px;
+  }
+  .fifths-detail dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 14px;
+    margin: 0;
+    font-size: 13px;
+  }
+  .fifths-detail dt {
+    font-family: var(--f-display);
+    font-style: italic;
+    color: var(--ink-mid);
+    font-weight: 500;
+  }
+  .fifths-detail dd {
+    margin: 0;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .fifths-detail .diatonic {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .fifths-detail .diatonic .chip {
+    font-family: var(--f-display);
+    font-size: 13px;
+    padding: 2px 8px;
+    background: var(--accent-wash);
+    color: var(--accent);
+    border-radius: 2px;
+    font-style: italic;
+    font-weight: 500;
+  }
+  .cof {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    margin: 0 auto;
+    flex-shrink: 0;
+  }
+  .cof-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: radial-gradient(circle at center, color-mix(in oklab, var(--accent) 5%, var(--paper)) 0%, var(--paper) 70%);
+  }
+  .cof-center {
+    position: absolute;
+    inset: 50%;
+    transform: translate(-50%, -50%);
+    width: 110px;
+    height: 110px;
+    margin: -55px 0 0 -55px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    pointer-events: none;
+  }
+  .cof-center .k-eyebrow {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .cof-center .k-name {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--accent);
+    line-height: 1.05;
+  }
+  .cof-center .k-sig {
+    font-family: var(--f-music);
+    font-size: 18px;
+    color: var(--ink-mid);
+    margin-top: 2px;
+    letter-spacing: 0.08em;
+    min-height: 24px;
+  }
+  .cof-center .k-rel {
+    font-size: 10px;
+    color: var(--ink-soft);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+  .cof-key {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 46px; height: 46px;
+    margin: -23px 0 0 -23px;
+    border-radius: 50%;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--f-display);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+    padding: 0;
+  }
+  .cof-key:hover { border-color: var(--accent); color: var(--accent); }
+  .cof-key[aria-pressed="true"] {
+    background: var(--accent);
+    color: #faf4e4;
+    border-color: var(--accent);
+  }
+  .cof-key:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  @media (max-width: 760px) {
+    .fifths-panel { grid-template-columns: 1fr; gap: 20px; }
+    .cof { width: 260px; height: 260px; }
+    .cof-center { width: 92px; height: 92px; margin: -46px 0 0 -46px; }
+  }
+
+  footer.colophon {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  footer.colophon .ornament { font-family: var(--f-music); color: var(--accent); letter-spacing: 0; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: color-mix(in oklab, #000 55%, transparent);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 100;
+    padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top, 0px));
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--paper);
+    border: 1px solid var(--paper-edge);
+    border-radius: 3px;
+    padding: 22px;
+    max-width: 460px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px -22px rgba(0,0,0,0.5);
+  }
+  .modal h2 {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-weight: 500;
+    margin: 0 0 4px;
+    font-size: 22px;
+    letter-spacing: -0.005em;
+  }
+  .modal .modal-sub {
+    font-size: 12px;
+    color: var(--ink-mid);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    margin-bottom: 16px;
+  }
+
+  .preview-name {
+    font-family: var(--f-display);
+    font-style: italic;
+    font-size: 20px;
+    text-align: center;
+    color: var(--accent);
+    margin-bottom: 4px;
+    font-weight: 500;
+    min-height: 28px;
+  }
+  .preview-wrap {
+    display: flex; align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--ink) 3%, var(--paper));
+    border-radius: 2px;
+    padding: 10px 16px 14px;
+    margin-bottom: 16px;
+    border: 1px solid var(--paper-edge);
+  }
+  .preview-wrap svg { max-width: 100%; height: auto; }
+
+  .picker-section { margin-bottom: 14px; }
+  .picker-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .picker-row {
+    display: grid;
+    gap: 4px;
+    grid-template-columns: repeat(7, 1fr);
+  }
+  .picker-row.roots { grid-template-columns: repeat(12, 1fr); }
+  .picker-row.qualities { grid-template-columns: repeat(4, 1fr); }
+  .picker-btn {
+    font-family: var(--f-display);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 9px 2px;
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    color: var(--ink);
+    cursor: pointer;
+    border-radius: 2px;
+    min-width: 0;
+  }
+  .picker-btn.quality { font-family: var(--f-body); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; padding: 10px 4px; }
+  .picker-btn:hover { border-color: var(--accent); }
+  .picker-btn.selected { background: var(--accent); color: #faf4e4; border-color: var(--accent); }
+  .picker-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+  .modal-actions {
+    display: flex; gap: 8px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .modal-actions .right { margin-left: auto; display: flex; gap: 8px; }
+
+  .export-preview .export-img-wrap {
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    padding: 8px;
+    overflow-x: auto;
+    margin-bottom: 12px;
+    border-radius: 2px;
+  }
+  .export-preview img { max-width: 100%; display: block; margin: 0 auto; }
+  .export-hint { font-size: 12px; color: var(--ink-mid); margin: 0 0 12px; line-height: 1.5; }
+
+  .toast {
+    position: fixed;
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 13px;
+    padding: 8px 14px;
+    border-radius: 2px;
+    letter-spacing: 0.02em;
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    font-family: var(--f-body);
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 560px) {
+    .picker-row.roots { grid-template-columns: repeat(6, 1fr); }
+    .picker-row.qualities { grid-template-columns: repeat(2, 1fr); }
+    .toolbar-spacer { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<header class="masthead">
+  <div>
+    <h1><span class="mark">&#x1D11E;</span>Chord Staff</h1>
+    <div class="tagline">A template editor for chord sheets.</div>
+  </div>
+  <div class="edition">Édition &middot; No. I</div>
+</header>
+
+<div class="sheet-head">
+  <input class="template-name" id="template-name" aria-label="Template name" spellcheck="false" />
+  <div class="sheet-key"><b>Treble clef</b> &middot; <span class="k-value" id="sheet-key-value">C major</span></div>
+</div>
+
+<div class="mode-bar">
+  <div class="mode-toggle" role="group" aria-label="Edit mode">
+    <button type="button" id="mode-chord" aria-pressed="true">Chords</button>
+    <button type="button" id="mode-notes" aria-pressed="false">Notes</button>
+  </div>
+  <div class="modifier-group" aria-label="Note duration">
+    <span class="label">Duration</span>
+    <button type="button" data-dur="whole"   aria-pressed="false" aria-label="Whole note">&#x1D15D;</button>
+    <button type="button" data-dur="half"    aria-pressed="false" aria-label="Half note">&#x1D15E;</button>
+    <button type="button" data-dur="quarter" aria-pressed="true"  aria-label="Quarter note">&#x1D15F;</button>
+    <button type="button" data-dur="eighth"  aria-pressed="false" aria-label="Eighth note">&#x1D160;</button>
+  </div>
+  <div class="modifier-group" id="accidentals-wrap" hidden aria-label="Accidental">
+    <span class="label">Accidental</span>
+    <button type="button" data-acc="-1" aria-pressed="false" aria-label="Flat">&#x266D;</button>
+    <button type="button" data-acc="0"  aria-pressed="true"  aria-label="Natural">&#x266E;</button>
+    <button type="button" data-acc="1"  aria-pressed="false" aria-label="Sharp">&#x266F;</button>
+  </div>
+</div>
+<div class="mode-hint" id="mode-hint">Click a measure to place a chord.</div>
+
+<div id="systems"></div>
+<div class="add-system-row" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+  <button class="btn-add-system" id="btn-add-system"><span class="plus">&#x271A;</span>Add line</button>
+  <button class="btn-add-system" id="btn-add-piano-line"><span class="plus">&#x271A;</span>Add piano line</button>
+</div>
+
+<div class="toolbar">
+  <button class="btn primary play" id="btn-play" aria-label="Play all lines"><span class="glyph" aria-hidden="true"></span><span id="btn-play-label">Play</span></button>
+  <button class="btn" id="btn-download">Save as PNG</button>
+  <button class="btn" id="btn-copy">Copy image</button>
+  <button class="btn" id="btn-export-json">Export JSON</button>
+  <button class="btn" id="btn-import-json">Import JSON</button>
+  <input type="file" id="json-file-input" accept="application/json,.json" hidden />
+  <button class="btn danger" id="btn-clear">Clear all</button>
+  <div class="toolbar-spacer"></div>
+  <div class="stepper">
+    <span class="label">Tempo</span>
+    <button id="btn-tempo-less" aria-label="Slower">&minus;</button>
+    <span class="count" id="tempo-value">100</span>
+    <button id="btn-tempo-more" aria-label="Faster">+</button>
+  </div>
+</div>
+
+<div class="help">
+  <strong>How it works.</strong> Switch between <em>Chords</em> and <em>Notes</em>, set a <em>Duration</em> and <em>Accidental</em>, and click a measure to place an event. You can put <em>multiple events in one measure</em> &mdash; e.g., two half notes or four quarters in 4/4. Click an existing event to edit or remove it; click the empty space after it to add the next. Each <em>Line</em> has its own <em>Time</em> signature and measure count; <strong>Play</strong> runs through every line in sequence.
+</div>
+
+<section class="fifths-panel">
+  <div class="cof" role="group" aria-label="Circle of Fifths">
+    <div class="cof-ring" aria-hidden="true"></div>
+    <div class="cof-center">
+      <div class="k-eyebrow">Key</div>
+      <div class="k-name" id="cof-name">C</div>
+      <div class="k-sig" id="cof-sig">&nbsp;</div>
+      <div class="k-rel" id="cof-rel">rel. A min</div>
+    </div>
+  </div>
+  <div class="fifths-detail">
+    <h2 class="fifths-head">Circle of Fifths</h2>
+    <div class="fifths-sub">Pick a key signature</div>
+    <dl>
+      <dt>Signature</dt><dd id="cof-detail-sig">no sharps or flats</dd>
+      <dt>Diatonic</dt><dd class="diatonic" id="cof-detail-diatonic"></dd>
+      <dt>Dominant</dt><dd id="cof-detail-dom">G</dd>
+    </dl>
+  </div>
+</section>
+
+<footer class="colophon">
+  <span>Chord Staff &middot; built by garyfimo</span>
+  <span class="ornament">&#x1D11E; &#x266D; &#x266F; &#x266E;</span>
+  <span>&copy; 2026 garyfimo</span>
+</footer>
+
+<div class="modal-backdrop" id="picker-modal" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+  <div class="modal">
+    <h2 id="picker-title">Choose a chord</h2>
+    <div class="modal-sub" id="picker-sub">Measure 1</div>
+    <div class="picker-preview-head">
+      <div class="preview-name" id="preview-name">C</div>
+      <button type="button" class="btn-preview-play" id="btn-preview-play" aria-label="Play this chord"><span class="glyph" aria-hidden="true"></span></button>
+    </div>
+    <div class="preview-wrap">
+      <svg id="preview-svg" viewBox="0 0 220 130" width="220" height="130" aria-hidden="true"></svg>
+    </div>
+    <div class="picker-section">
+      <div class="picker-label">Root</div>
+      <div class="picker-row roots" id="root-row"></div>
+    </div>
+    <div class="picker-section">
+      <div class="picker-label">Quality</div>
+      <div class="picker-row qualities" id="quality-row"></div>
+    </div>
+    <div class="picker-section">
+      <div class="picker-label">Duration</div>
+      <div class="picker-row qualities" id="duration-row"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn danger" id="btn-remove-chord">Remove</button>
+      <div class="right">
+        <button class="btn ghost" id="btn-cancel">Cancel</button>
+        <button class="btn primary" id="btn-confirm">Place chord</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
+  <div class="modal export-preview">
+    <h2 id="export-title">Your chord sheet</h2>
+    <p class="export-hint">If the download didn&rsquo;t start, right-click (or long-press on mobile) the image below and choose <em>Save Image</em>.</p>
+    <div class="export-img-wrap">
+      <img id="export-img" alt="Rendered chord sheet" />
+    </div>
+    <div class="modal-actions">
+      <div class="right">
+        <button class="btn" id="btn-close-export">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // --- Music theory ---
+  const LETTERS = ['C','D','E','F','G','A','B'];
+  const LETTER_PITCHES = [0, 2, 4, 5, 7, 9, 11];
+  const ROOTS = ['C','C#','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+  const QUALITIES = [
+    { id: '',    label: 'Major',  formula: [0, 4, 7],     stack: 'thirds' },
+    { id: 'm',   label: 'Minor',  formula: [0, 3, 7],     stack: 'thirds' },
+    { id: '7',   label: '7',      formula: [0, 4, 7, 10], stack: 'thirds' },
+    { id: 'maj7',label: 'Maj7',   formula: [0, 4, 7, 11], stack: 'thirds' },
+    { id: 'm7',  label: 'min7',   formula: [0, 3, 7, 10], stack: 'thirds' },
+    { id: 'dim', label: 'Dim',    formula: [0, 3, 6],     stack: 'thirds' },
+    { id: 'sus4',label: 'Sus4',   formula: [0, 5, 7],     stack: 'sus4' },
+    { id: '5',   label: 'Power',  formula: [0, 7],        stack: 'fifth' },
+  ];
+  const DURATIONS = {
+    whole:   { beats: 4,   hollow: true,  stem: false, flags: 0 },
+    half:    { beats: 2,   hollow: true,  stem: true,  flags: 0 },
+    quarter: { beats: 1,   hollow: false, stem: true,  flags: 0 },
+    eighth:  { beats: 0.5, hollow: false, stem: true,  flags: 1 },
+  };
+  const TIME_SIGS = ['2/4', '3/4', '4/4', '6/8', '5/4', '3/8'];
+  function parseTime(sig) {
+    const parts = String(sig || '4/4').split('/');
+    return { num: parseInt(parts[0], 10) || 4, den: parseInt(parts[1], 10) || 4 };
+  }
+  function measureBeats(time) {
+    // Returns duration of one measure in quarter-note beats
+    return time.num * (4 / time.den);
+  }
+  // Find the largest duration (whole > half > quarter > eighth) that fits within `beats`.
+  const DURATION_ORDER = ['whole', 'half', 'quarter', 'eighth'];
+  function fitDurationToMeasure(durId, beats) {
+    const current = DURATIONS[durId] || DURATIONS.quarter;
+    if (current.beats <= beats) return durId;
+    for (let i = 0; i < DURATION_ORDER.length; i++) {
+      if (DURATIONS[DURATION_ORDER[i]].beats <= beats) return DURATION_ORDER[i];
+    }
+    return 'eighth';
+  }
+  function fitSystemDurations(sys) {
+    const mBeats = measureBeats(parseTime(sys.time));
+    let changed = 0;
+    const contents = [sys.content];
+    if (sys.kind === 'piano' && sys.bassContent) contents.push(sys.bassContent);
+    contents.forEach(function (contentMap) {
+      Object.keys(contentMap).forEach(function (k) {
+        const cell = contentMap[k];
+        const evts = measureEvents(cell);
+        if (!evts.length) return;
+        const kept = [];
+        let acc = 0;
+        for (let i = 0; i < evts.length; i++) {
+          const e = evts[i];
+          const remaining = mBeats - acc;
+          if (remaining <= 0) { changed++; continue; }
+          const curDur = eventDuration(e);
+          const fitted = fitDurationToMeasure(curDur, remaining);
+          if (fitted !== curDur) { e.duration = fitted; changed++; }
+          kept.push(e);
+          acc += DURATIONS[eventDuration(e)].beats;
+        }
+        setMeasureIn(contentMap, k, kept);
+      });
+    });
+    return changed;
+  }
+  const SHARP_ORDER = ['F','C','G','D','A','E','B'];
+  const FLAT_ORDER  = ['B','E','A','D','G','C','F'];
+  const SHARP_POS = { F:10, C:7, G:11, D:8, A:5, E:9, B:6 };
+  const FLAT_POS  = { B:6, E:9, A:5, D:8, G:4, C:7, F:3 };
+  // Bass-clef positions (bottom line = G2 = position 2)
+  const BASS_SHARP_POS = { F:8, C:5, G:9, D:6, A:3, E:7, B:4 };
+  const BASS_FLAT_POS  = { B:4, E:7, A:3, D:6, G:2, C:5, F:8 };
+  // Each clef maps diatonic absolute number (octave*7 + letterIdx, C=0) to its own position space
+  // Treble: position 0 = C4 (abs 28). Bass: position 0 = E2 (abs 16).
+  const CLEFS = {
+    treble: { base: 28, startOctave: 4, glyph: '𝄞', glyphFontSize: 86, glyphYOffset: 6 },
+    bass:   { base: 16, startOctave: 2, glyph: '𝄢', glyphFontSize: 56, glyphYOffset: -24 },
+  };
+  const KEYS = {
+    'C':{sharps:0,flats:0,rel:'A'}, 'G':{sharps:1,flats:0,rel:'E'},
+    'D':{sharps:2,flats:0,rel:'B'}, 'A':{sharps:3,flats:0,rel:'F#'},
+    'E':{sharps:4,flats:0,rel:'C#'},'B':{sharps:5,flats:0,rel:'G#'},
+    'F#':{sharps:6,flats:0,rel:'D#'},'Gb':{sharps:0,flats:6,rel:'Eb'},
+    'Db':{sharps:0,flats:5,rel:'Bb'},'Ab':{sharps:0,flats:4,rel:'F'},
+    'Eb':{sharps:0,flats:3,rel:'C'},'Bb':{sharps:0,flats:2,rel:'G'},
+    'F':{sharps:0,flats:1,rel:'D'},
+  };
+  const CIRCLE_KEYS = ['C','G','D','A','E','B','F#','Db','Ab','Eb','Bb','F'];
+
+  function keySignatureAccidentals(key, clef) {
+    clef = clef || 'treble';
+    const info = KEYS[key] || KEYS.C;
+    const SP = clef === 'bass' ? BASS_SHARP_POS : SHARP_POS;
+    const FP = clef === 'bass' ? BASS_FLAT_POS : FLAT_POS;
+    if (info.sharps > 0) {
+      return SHARP_ORDER.slice(0, info.sharps).map(function (letter) {
+        return { letter: letter, accidental: 1, position: SP[letter] };
+      });
+    } else if (info.flats > 0) {
+      return FLAT_ORDER.slice(0, info.flats).map(function (letter) {
+        return { letter: letter, accidental: -1, position: FP[letter] };
+      });
+    }
+    return [];
+  }
+  function keySignatureWidth(key) {
+    const n = keySignatureAccidentals(key).length;
+    return n === 0 ? 0 : (n * 8 + 6);
+  }
+  function diatonicChords(key) {
+    const info = KEYS[key] || KEYS.C;
+    const rootPitch = LETTER_PITCHES[LETTERS.indexOf(key[0])] + (key.length > 1 ? (key[1] === '#' ? 1 : -1) : 0);
+    const scale = [0, 2, 4, 5, 7, 9, 11];
+    const qualities = ['', 'm', 'm', '', '', 'm', 'dim'];
+    const degrees = ['I','ii','iii','IV','V','vi','vii°'];
+    const useFlats = info.flats > 0;
+    const sharpNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+    const flatNames  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+    return scale.map(function (step, i) {
+      const pc = ((rootPitch + step) % 12 + 12) % 12;
+      const name = (useFlats ? flatNames : sharpNames)[pc];
+      return { degree: degrees[i], root: name, quality: qualities[i], label: name + (qualities[i] === 'dim' ? '°' : qualities[i]) };
+    });
+  }
+
+  function prettyRoot(r) { return r.replace('#', '♯').replace('b', '♭'); }
+  function prettyKey(k) { return prettyRoot(k) + ' major'; }
+  function prettyQualitySuffix(id) {
+    if (id === '') return '';
+    if (id === 'm') return 'm';
+    if (id === 'maj7') return 'maj7';
+    if (id === 'm7') return 'm7';
+    if (id === 'dim') return '°';
+    if (id === 'sus4') return 'sus4';
+    if (id === '5') return '5';
+    return id;
+  }
+  function chordName(root, quality) { return prettyRoot(root) + prettyQualitySuffix(quality); }
+
+  function chordNotes(root, qualityId, clef) {
+    clef = clef || 'treble';
+    const cfg = CLEFS[clef];
+    const rootLetter = root[0];
+    const rootAcc = root.length > 1 ? (root[1] === '#' ? 1 : -1) : 0;
+    const rootLetterIdx = LETTERS.indexOf(rootLetter);
+    const rootPitch = ((LETTER_PITCHES[rootLetterIdx] + rootAcc) % 12 + 12) % 12;
+    const q = QUALITIES.find(function (x) { return x.id === qualityId; });
+    const formula = q.formula;
+    const notes = [];
+    for (let i = 0; i < formula.length; i++) {
+      let letterStep;
+      if (q.stack === 'sus4') letterStep = i === 0 ? 0 : (i === 1 ? 3 : 4);
+      else if (q.stack === 'fifth') letterStep = i === 0 ? 0 : 4;
+      else letterStep = i * 2;
+      const noteLetterIdx = (rootLetterIdx + letterStep) % 7;
+      const letterNatural = LETTER_PITCHES[noteLetterIdx];
+      const target = (rootPitch + formula[i]) % 12;
+      let acc = target - letterNatural;
+      if (acc > 6) acc -= 12;
+      if (acc < -6) acc += 12;
+      notes.push({ letter: LETTERS[noteLetterIdx], accidental: acc });
+    }
+    let octave = cfg.startOctave, prevPos = -Infinity;
+    const result = [];
+    for (let i = 0; i < notes.length; i++) {
+      const idx = LETTERS.indexOf(notes[i].letter);
+      let pos = octave * 7 + idx - cfg.base;
+      while (pos <= prevPos) { octave++; pos = octave * 7 + idx - cfg.base; }
+      result.push({ letter: notes[i].letter, accidental: notes[i].accidental, octave: octave, position: pos });
+      prevPos = pos;
+    }
+    return result;
+  }
+  function expandNote(n, clef) {
+    clef = clef || 'treble';
+    const abs = CLEFS[clef].base + n.position;
+    const letterIdx = ((abs % 7) + 7) % 7;
+    const octave = Math.floor(abs / 7);
+    return { letter: LETTERS[letterIdx], accidental: n.accidental || 0, octave: octave, position: n.position };
+  }
+  function eventNotes(evt, clef) {
+    if (!evt) return [];
+    if (evt.kind === 'chord') return chordNotes(evt.root, evt.quality, clef);
+    if (evt.kind === 'notes') return (evt.notes || []).map(function (n) { return expandNote(n, clef); });
+    return [];
+  }
+  function eventDuration(evt) {
+    return (evt && DURATIONS[evt.duration]) ? evt.duration : 'quarter';
+  }
+  function measureEvents(cell) {
+    if (!cell) return [];
+    if (Array.isArray(cell.events)) return cell.events;
+    if (cell.kind) return [cell];
+    return [];
+  }
+  function usedBeats(evts) {
+    let total = 0;
+    for (let i = 0; i < evts.length; i++) total += DURATIONS[eventDuration(evts[i])].beats;
+    return total;
+  }
+  function setMeasure(sys, slot, events, staff) {
+    const content = systemContent(sys, staff || 'treble');
+    setMeasureIn(content, slot, events);
+  }
+  function setMeasureIn(content, slot, events) {
+    if (!events || events.length === 0) delete content[slot];
+    else content[slot] = { events: events.slice() };
+  }
+  // Returns [{evt, startBeat, beats}] for each event in a measure
+  function layoutEvents(cell) {
+    const evts = measureEvents(cell);
+    let acc = 0;
+    return evts.map(function (e) {
+      const b = DURATIONS[eventDuration(e)].beats;
+      const item = { evt: e, startBeat: acc, beats: b };
+      acc += b;
+      return item;
+    });
+  }
+  function migrateContent(content) {
+    if (!content || typeof content !== 'object') return {};
+    const out = {};
+    Object.keys(content).forEach(function (k) {
+      const c = content[k];
+      if (!c) return;
+      if (Array.isArray(c.events)) out[k] = { events: c.events };
+      else if (c.kind) out[k] = { events: [c] };
+    });
+    return out;
+  }
+
+  // --- State (multi-system) ---
+  const STORAGE_KEY = 'chord-staff-v1';
+  const DEFAULT_SYSTEMS = [
+    {
+      slots: 8,
+      time: '4/4',
+      content: {
+        0: { kind: 'chord', root: 'C', quality: '',  duration: 'quarter' },
+        1: { kind: 'chord', root: 'G', quality: '',  duration: 'quarter' },
+        2: { kind: 'chord', root: 'A', quality: 'm', duration: 'quarter' },
+        3: { kind: 'chord', root: 'F', quality: '',  duration: 'quarter' },
+        4: { kind: 'chord', root: 'C', quality: '',  duration: 'quarter' },
+        5: { kind: 'chord', root: 'G', quality: '',  duration: 'quarter' },
+        6: { kind: 'chord', root: 'F', quality: '',  duration: 'quarter' },
+        7: { kind: 'chord', root: 'G', quality: '7', duration: 'half' },
+      },
+    },
+  ];
+  let state = {
+    name: 'Canon in C',
+    tempo: 100,
+    mode: 'chord',
+    accidental: 0,
+    duration: 'quarter',
+    key: 'C',
+    systems: JSON.parse(JSON.stringify(DEFAULT_SYSTEMS)).map(function (s) {
+      s.content = migrateContent(s.content);
+      s.kind = s.kind || 'treble';
+      return s;
+    }),
+  };
+
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (typeof parsed.name === 'string') state.name = parsed.name;
+      if (typeof parsed.tempo === 'number') state.tempo = parsed.tempo;
+      if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
+      if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
+      if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+      if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
+      if (Array.isArray(parsed.systems) && parsed.systems.length) {
+        state.systems = parsed.systems.map(function (s) {
+          const kind = s.kind === 'piano' ? 'piano' : 'treble';
+          const out = {
+            slots: typeof s.slots === 'number' ? s.slots : 8,
+            time: TIME_SIGS.indexOf(s.time) >= 0 ? s.time : '4/4',
+            content: migrateContent(s.content),
+            kind: kind,
+          };
+          if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+          return out;
+        });
+      } else if (parsed.content && typeof parsed.content === 'object') {
+        state.systems = [{ slots: parsed.slots || 8, time: '4/4', content: migrateContent(parsed.content), kind: 'treble' }];
+      } else if (parsed.chords && typeof parsed.chords === 'object') {
+        const content = {};
+        Object.keys(parsed.chords).forEach(function (k) {
+          const c = parsed.chords[k];
+          if (c && c.root != null) content[k] = { events: [{ kind: 'chord', root: c.root, quality: c.quality || '', duration: 'quarter' }] };
+        });
+        state.systems = [{ slots: parsed.slots || 8, time: '4/4', content: content, kind: 'treble' }];
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        name: state.name, tempo: state.tempo,
+        mode: state.mode, accidental: state.accidental, duration: state.duration,
+        key: state.key, systems: state.systems,
+      }));
+    } catch (e) { /* ignore */ }
+  }
+
+  // --- Staff geometry ---
+  const STAFF = {
+    W: 1000, H: 200,
+    leftMargin: 78,
+    rightMargin: 22,
+    topY: 72,
+    spacing: 13,
+    labelY: 40,
+  };
+  STAFF.bottomY = STAFF.topY + 4 * STAFF.spacing;
+  function noteY(position) { return STAFF.bottomY - (position - 2) * STAFF.spacing / 2; }
+  function positionFromY(y, bottomY) {
+    const by = bottomY != null ? bottomY : STAFF.bottomY;
+    const steps = Math.round((by - y) * 2 / STAFF.spacing);
+    return Math.max(-5, Math.min(16, 2 + steps));
+  }
+  function timeSigWidth() { return 28; }
+  function playableLeftEdge() { return STAFF.leftMargin + keySignatureWidth(state.key) + timeSigWidth(); }
+  function slotWidth(slots) { return (STAFF.W - playableLeftEdge() - STAFF.rightMargin) / slots; }
+  function slotCenterX(i, slots) { return playableLeftEdge() + slotWidth(slots) * (i + 0.5); }
+
+  function drawTimeSignature(svg, timeStr, opts) {
+    opts = opts || {};
+    const time = parseTime(timeStr);
+    const spacing = opts.spacing || STAFF.spacing;
+    const bottomY = opts.bottomY != null ? opts.bottomY : STAFF.bottomY;
+    const topY    = opts.topY != null ? opts.topY : STAFF.topY;
+    const startX  = opts.startX != null ? opts.startX : (STAFF.leftMargin + keySignatureWidth(state.key));
+    const colorInk = opts.colorInk || 'var(--staff)';
+    const fontSize = opts.fontSize || (spacing * 2.3);
+    const cx = startX + 12;
+    const yNum = topY + spacing + fontSize * 0.33;
+    const yDen = bottomY - spacing + fontSize * 0.33;
+    svg.appendChild(el('text', {
+      x: cx, y: yNum, 'text-anchor': 'middle',
+      'font-family': 'Fraunces, Georgia, serif',
+      'font-weight': 700, 'font-size': fontSize, fill: colorInk,
+    }, String(time.num)));
+    svg.appendChild(el('text', {
+      x: cx, y: yDen, 'text-anchor': 'middle',
+      'font-family': 'Fraunces, Georgia, serif',
+      'font-weight': 700, 'font-size': fontSize, fill: colorInk,
+    }, String(time.den)));
+  }
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  function el(name, attrs, text) {
+    const n = document.createElementNS(SVG_NS, name);
+    if (attrs) for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  function accidentalGlyph(acc) {
+    if (acc === 1) return '♯';
+    if (acc === -1) return '♭';
+    if (acc === 2) return '𝄪';
+    if (acc === -2) return '𝄫';
+    return '♮';
+  }
+
+  function drawNotesCluster(svg, notes, cx, labelText, opts) {
+    opts = opts || {};
+    const spacing = opts.spacing || STAFF.spacing;
+    const bottomY = opts.bottomY != null ? opts.bottomY : STAFF.bottomY;
+    const labelY  = opts.labelY != null ? opts.labelY : STAFF.labelY;
+    const ledgerHalf = opts.ledgerHalf || 11;
+    const noteRx = opts.noteRx || 6.7;
+    const noteRy = opts.noteRy || 4.8;
+    const accSize = opts.accSize || 18;
+    const accOffset = opts.accOffset || 11;
+    const labelSize = opts.labelSize || 21;
+    const colorInk = opts.colorInk || 'var(--staff)';
+    const colorAccent = opts.colorAccent || 'var(--accent)';
+    const durationId = opts.duration || 'quarter';
+    const duration = DURATIONS[durationId];
+    function ny(p) { return bottomY - (p - 2) * spacing / 2; }
+
+    if (labelText) {
+      svg.appendChild(el('text', {
+        x: cx, y: labelY, 'text-anchor': 'middle',
+        'font-family': 'var(--f-display)', 'font-size': labelSize,
+        'font-style': 'italic', 'font-weight': 500, fill: colorAccent,
+      }, labelText));
+    }
+    if (!notes || notes.length === 0) return;
+
+    let minP = Infinity, maxP = -Infinity;
+    for (let i = 0; i < notes.length; i++) {
+      if (notes[i].position < minP) minP = notes[i].position;
+      if (notes[i].position > maxP) maxP = notes[i].position;
+    }
+    for (let p = 0; p >= minP; p -= 2) {
+      svg.appendChild(el('line', { x1: cx - ledgerHalf, y1: ny(p), x2: cx + ledgerHalf, y2: ny(p), stroke: colorInk, 'stroke-width': 1.2, 'stroke-linecap': 'round' }));
+    }
+    for (let p = 12; p <= maxP; p += 2) {
+      svg.appendChild(el('line', { x1: cx - ledgerHalf, y1: ny(p), x2: cx + ledgerHalf, y2: ny(p), stroke: colorInk, 'stroke-width': 1.2, 'stroke-linecap': 'round' }));
+    }
+    const sorted = notes.slice().sort(function (a, b) { return a.position - b.position; });
+    const xo = {};
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i].position - sorted[i - 1].position === 1) {
+        xo[sorted[i].position] = (xo[sorted[i - 1].position] || 0) + (noteRx * 2 - 1);
+      } else {
+        xo[sorted[i].position] = 0;
+      }
+    }
+    const accPositions = [];
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i];
+      if (n.accidental === 0) continue;
+      let col = 0;
+      while (accPositions.some(function (p) { return p.col === col && Math.abs(p.pos - n.position) < 6; })) col++;
+      accPositions.push({ pos: n.position, col: col });
+      const x = cx - accOffset - col * (accSize * 0.55) + (xo[n.position] || 0);
+      svg.appendChild(el('text', {
+        x: x, y: ny(n.position) + accSize * 0.3,
+        'text-anchor': 'end', 'font-family': 'var(--f-music)', 'font-size': accSize, fill: colorInk,
+      }, accidentalGlyph(n.accidental)));
+    }
+    const avgPos = (minP + maxP) / 2;
+    const stemUp = avgPos <= 6;
+    const stemLen = Math.max(28, (maxP - minP) * spacing / 2 + 28);
+    const maxXo = Math.max.apply(null, Object.values(xo).concat([0]));
+    const stemX = stemUp ? (cx + noteRx + maxXo) : (cx - noteRx);
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i];
+      const y = ny(n.position);
+      const x = cx + (xo[n.position] || 0);
+      if (duration.hollow) {
+        svg.appendChild(el('ellipse', { cx: x, cy: y, rx: noteRx, ry: noteRy, fill: 'none', stroke: colorInk, 'stroke-width': 1.6, transform: 'rotate(-22 ' + x + ' ' + y + ')' }));
+      } else {
+        svg.appendChild(el('ellipse', { cx: x, cy: y, rx: noteRx, ry: noteRy, fill: colorInk, transform: 'rotate(-22 ' + x + ' ' + y + ')' }));
+      }
+    }
+    if (duration.stem) {
+      const yAnchor = stemUp ? ny(minP) : ny(maxP);
+      const yFar = stemUp ? (ny(maxP) - stemLen) : (ny(minP) + stemLen);
+      svg.appendChild(el('line', { x1: stemX, y1: yAnchor, x2: stemX, y2: yFar, stroke: colorInk, 'stroke-width': 1.4, 'stroke-linecap': 'round' }));
+      if (duration.flags > 0) {
+        for (let f = 0; f < duration.flags; f++) {
+          const yStart = yFar + f * 7 * (stemUp ? 1 : -1);
+          const dir = stemUp ? 1 : -1;
+          svg.appendChild(el('path', {
+            d: 'M' + stemX + ' ' + yStart +
+               ' Q' + (stemX + 11) + ' ' + (yStart + 6 * dir) +
+               ' ' + (stemX + 9) + ' ' + (yStart + 18 * dir),
+            fill: 'none', stroke: colorInk, 'stroke-width': 1.4, 'stroke-linecap': 'round',
+          }));
+        }
+      }
+    }
+  }
+
+  function drawKeySignature(svg, key, opts) {
+    opts = opts || {};
+    const spacing = opts.spacing || STAFF.spacing;
+    const bottomY = opts.bottomY != null ? opts.bottomY : STAFF.bottomY;
+    const startX = opts.startX != null ? opts.startX : STAFF.leftMargin;
+    const colorInk = opts.colorInk || 'var(--staff)';
+    const fontSize = opts.fontSize || 22;
+    const stepX = opts.stepX || 8;
+    const accs = keySignatureAccidentals(key, opts.clef || 'treble');
+    accs.forEach(function (a, i) {
+      const x = startX + i * stepX;
+      const y = bottomY - (a.position - 2) * spacing / 2 + fontSize * 0.33;
+      svg.appendChild(el('text', { x: x, y: y, 'font-family': 'var(--f-music)', 'font-size': fontSize, fill: colorInk }, a.accidental === 1 ? '♯' : '♭'));
+    });
+  }
+
+  function systemContent(system, staff) {
+    if (staff === 'bass') {
+      if (!system.bassContent) system.bassContent = {};
+      return system.bassContent;
+    }
+    return system.content;
+  }
+  function staffFrames(system) {
+    const frames = [{ staff: 'treble', clef: 'treble', contentKey: 'content', topY: STAFF.topY, bottomY: STAFF.bottomY, labelY: STAFF.labelY }];
+    if (system.kind === 'piano') {
+      const bassTop = STAFF.bottomY + 56;
+      frames.push({ staff: 'bass', clef: 'bass', contentKey: 'bassContent', topY: bassTop, bottomY: bassTop + 4 * STAFF.spacing, labelY: bassTop - 10 });
+    }
+    return frames;
+  }
+  function systemSvgHeight(system) {
+    return system.kind === 'piano' ? (STAFF.bottomY + 56 + 4 * STAFF.spacing + 36) : STAFF.H;
+  }
+
+  function renderSystemStaff(svg, sysIdx, interactive) {
+    const system = state.systems[sysIdx];
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    const H = systemSvgHeight(system);
+    svg.setAttribute('viewBox', '0 0 ' + STAFF.W + ' ' + H);
+    const slots = system.slots;
+    const frames = staffFrames(system);
+    const mBeats = measureBeats(parseTime(system.time));
+    const playLeft = playableLeftEdge();
+    const sw = slotWidth(slots);
+    const rx = STAFF.W - STAFF.rightMargin;
+
+    // Brace for piano: a thick vertical join between the two staves
+    if (system.kind === 'piano') {
+      const top = frames[0].topY;
+      const bot = frames[1].bottomY;
+      const bx = STAFF.leftMargin - 14;
+      svg.appendChild(el('path', {
+        d: 'M' + bx + ' ' + top + ' Q' + (bx - 10) + ' ' + ((top + bot) / 2) + ' ' + bx + ' ' + bot,
+        fill: 'none', stroke: 'var(--staff)', 'stroke-width': 3, 'stroke-linecap': 'round',
+      }));
+    }
+
+    frames.forEach(function (f) {
+      // Staff lines
+      for (let i = 0; i < 5; i++) {
+        const y = f.topY + i * STAFF.spacing;
+        svg.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: y, x2: rx, y2: y, stroke: 'var(--staff)', 'stroke-width': 1.15 }));
+      }
+      // Left bar
+      svg.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.5 }));
+      // Clef glyph
+      const cfg = CLEFS[f.clef];
+      svg.appendChild(el('text', { x: 8, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'var(--f-music)', 'font-size': cfg.glyphFontSize, fill: 'var(--staff)' }, cfg.glyph));
+      drawKeySignature(svg, state.key, { startX: STAFF.leftMargin, bottomY: f.bottomY, clef: f.clef });
+      drawTimeSignature(svg, system.time || '4/4', { topY: f.topY, bottomY: f.bottomY });
+
+      // Measure bars
+      for (let i = 1; i < slots; i++) {
+        const x = playLeft + sw * i;
+        svg.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 0.9, opacity: 0.55 }));
+      }
+      svg.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 1.1 }));
+      svg.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: 'var(--staff)', 'stroke-width': 2 }));
+
+      // Measure numbers (only on treble)
+      if (f.staff === 'treble') {
+        for (let i = 0; i < slots; i++) {
+          const x = playLeft + sw * i + 4;
+          svg.appendChild(el('text', { x: x, y: f.topY - 6, 'font-family': 'var(--f-body)', 'font-size': 9, 'font-weight': 500, 'letter-spacing': 0.5, fill: 'var(--ink-soft)', opacity: 0.7 }, String(i + 1)));
+        }
+      }
+
+      // Events
+      const contentMap = systemContent(system, f.staff);
+      for (let i = 0; i < slots; i++) {
+        const cell = contentMap[i];
+        const items = layoutEvents(cell);
+        const mLeft = playLeft + sw * i;
+        const mWidth = sw;
+        if (items.length === 0) {
+          if (state.mode === 'chord') {
+            svg.appendChild(el('text', {
+              x: mLeft + mWidth / 2, y: f.labelY,
+              'text-anchor': 'middle',
+              'font-family': 'var(--f-display)', 'font-size': 20, 'font-style': 'italic',
+              fill: 'var(--ink-soft)', opacity: 0.35,
+            }, '+'));
+          }
+        } else {
+          const inset = Math.max(10, mWidth * 0.08);
+          items.forEach(function (it) {
+            const cx = mLeft + (it.startBeat / mBeats) * mWidth + inset;
+            const alloc = (it.beats / mBeats) * mWidth;
+            const labelSize = Math.max(12, Math.min(21, alloc * 0.45));
+            const e = it.evt;
+            if (e.kind === 'chord') {
+              drawNotesCluster(svg, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), {
+                duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
+              });
+            } else if (e.kind === 'notes') {
+              drawNotesCluster(svg, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, {
+                duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
+              });
+            }
+          });
+        }
+      }
+
+      // Click targets (per-staff when interactive)
+      if (interactive) {
+        for (let i = 0; i < slots; i++) {
+          const x = playLeft + sw * i;
+          const w = sw;
+          const cell = contentMap[i];
+          const items = layoutEvents(cell);
+          const used = usedBeats(measureEvents(cell));
+          items.forEach(function (it, evtIdx) {
+            const zoneX = x + (it.startBeat / mBeats) * w;
+            const zoneW = (it.beats / mBeats) * w;
+            svg.appendChild(el('rect', {
+              x: zoneX, y: f.topY - 44,
+              width: zoneW,
+              height: (f.bottomY - f.topY) + 84,
+              'class': 'slot-target',
+              'data-slot': i, 'data-system': sysIdx, 'data-event': evtIdx, 'data-staff': f.staff,
+              tabindex: '0', role: 'button',
+              'aria-label': 'Edit event ' + (evtIdx + 1) + ' in measure ' + (i + 1) + ', line ' + (sysIdx + 1) + ' (' + f.staff + ')',
+            }));
+          });
+          const trailStartBeat = used;
+          const trailBeats = mBeats - used;
+          if (trailBeats > 1e-6) {
+            const zoneX = x + (trailStartBeat / mBeats) * w;
+            const zoneW = (trailBeats / mBeats) * w;
+            svg.appendChild(el('rect', {
+              x: zoneX, y: f.topY - 44,
+              width: zoneW,
+              height: (f.bottomY - f.topY) + 84,
+              'class': 'slot-target',
+              'data-slot': i, 'data-system': sysIdx, 'data-event': 'new', 'data-staff': f.staff,
+              tabindex: '0', role: 'button',
+              'aria-label': (items.length ? 'Add event to measure ' : (state.mode === 'chord' ? 'Add chord to measure ' : 'Place note in measure ')) + (i + 1) + ', line ' + (sysIdx + 1) + ' (' + f.staff + ')',
+            }));
+          }
+        }
+      }
+    });
+  }
+
+  // --- Audio ---
+  function noteFrequency(note) {
+    const letterIdx = LETTERS.indexOf(note.letter);
+    const pitchClass = ((LETTER_PITCHES[letterIdx] + note.accidental) % 12 + 12) % 12;
+    const midi = 12 * (note.octave + 1) + pitchClass;
+    return 440 * Math.pow(2, (midi - 69) / 12);
+  }
+  const synth = {
+    ctx: null, active: [],
+    ensure: function () {
+      if (!this.ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return null;
+        this.ctx = new AC();
+      }
+      if (this.ctx.state === 'suspended') { try { this.ctx.resume(); } catch (e) {} }
+      return this.ctx;
+    },
+    playNotes: function (notes, startTime, duration) {
+      const ctx = this.ensure();
+      if (!ctx || !notes || notes.length === 0) return;
+      const t0 = Math.max(startTime, ctx.currentTime + 0.005);
+      const endT = t0 + duration;
+      const master = ctx.createGain();
+      master.gain.value = Math.min(0.42, 0.7 / Math.max(1, notes.length));
+      // Gentle lowpass to tame harsh harmonics on top
+      const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 7000; tone.Q.value = 0.3;
+      master.connect(tone).connect(ctx.destination);
+      const self = this;
+      // Piano-like additive synth: 6 sine partials per note, each with pitch-scaled exponential decay.
+      // A short bandpass-noise burst at onset acts as the hammer strike. setTargetAtTime does the natural
+      // ringing decay; a second setTargetAtTime at note-end applies a damper-like release.
+      notes.forEach(function (note) {
+        const freq = noteFrequency(note);
+        // Lower notes ring longer, like a real piano.
+        const octBelow = Math.max(0, Math.log2(220 / Math.max(freq, 55)));
+        const bodyT60 = 1.6 + octBelow * 1.1; // seconds to -60dB
+        const partials = [
+          { mult: 1, amp: 1.00, t60Mult: 1.0 },
+          { mult: 2, amp: 0.55, t60Mult: 0.65 },
+          { mult: 3, amp: 0.28, t60Mult: 0.45 },
+          { mult: 4, amp: 0.14, t60Mult: 0.35 },
+          { mult: 5, amp: 0.06, t60Mult: 0.25 },
+          { mult: 6, amp: 0.03, t60Mult: 0.20 },
+        ];
+        const tailStop = Math.min(t0 + bodyT60 + 0.2, endT + 0.45);
+        partials.forEach(function (p) {
+          const pf = freq * p.mult;
+          if (pf > 12500) return;
+          const osc = ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.value = pf;
+          const g = ctx.createGain();
+          const tau = (bodyT60 * p.t60Mult) / 6.9;
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(p.amp, t0 + 0.004);
+          g.gain.setTargetAtTime(0.0001, t0 + 0.004, tau);
+          // Damper-like release when the note ends
+          g.gain.setTargetAtTime(0.0001, endT, 0.08);
+          osc.connect(g).connect(master);
+          osc.start(t0);
+          osc.stop(tailStop);
+          self.active.push(osc);
+        });
+        // Hammer strike: short filtered noise burst
+        try {
+          const bufDur = 0.05;
+          const bufLen = Math.max(1, Math.ceil(ctx.sampleRate * bufDur));
+          const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+          const data = buf.getChannelData(0);
+          for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+          const src = ctx.createBufferSource(); src.buffer = buf;
+          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+          bp.frequency.value = Math.min(6000, freq * 2.5); bp.Q.value = 1.6;
+          const hg = ctx.createGain();
+          hg.gain.setValueAtTime(0.0001, t0);
+          hg.gain.exponentialRampToValueAtTime(0.22, t0 + 0.002);
+          hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+          src.connect(bp).connect(hg).connect(master);
+          src.start(t0); src.stop(t0 + bufDur + 0.02);
+          self.active.push(src);
+        } catch (e) { /* ignore */ }
+      });
+    },
+    stopAll: function () {
+      this.active.forEach(function (n) { try { n.stop(); } catch (e) {} });
+      this.active = [];
+    },
+  };
+
+  // --- UI render ---
+  const systemsHost = document.getElementById('systems');
+  const nameInput = document.getElementById('template-name');
+
+  function makeSystemElement(sysIdx) {
+    const sheet = document.createElement('div');
+    sheet.className = 'staff-sheet';
+    sheet.setAttribute('data-system', sysIdx);
+
+    const head = document.createElement('div');
+    head.className = 'system-head';
+    const label = document.createElement('div');
+    label.className = 'label';
+    label.innerHTML = '<b>Line ' + (sysIdx + 1) + '</b>';
+    head.appendChild(label);
+    const spacer = document.createElement('div');
+    spacer.className = 'system-head-spacer';
+    head.appendChild(spacer);
+
+    const timeWrap = document.createElement('div');
+    timeWrap.className = 'time-select';
+    const timeSel = document.createElement('select');
+    timeSel.setAttribute('aria-label', 'Time signature for line ' + (sysIdx + 1));
+    TIME_SIGS.forEach(function (t) {
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      timeSel.appendChild(opt);
+    });
+    const currentTime = state.systems[sysIdx].time || '4/4';
+    timeSel.value = currentTime;
+    timeWrap.innerHTML = '<span>Time</span>';
+    timeWrap.appendChild(timeSel);
+    head.appendChild(timeWrap);
+
+    const stepper = document.createElement('div');
+    stepper.className = 'stepper';
+    stepper.innerHTML = '<span class="label">Measures</span>' +
+      '<button class="less" aria-label="Remove measure">−</button>' +
+      '<span class="count"></span>' +
+      '<button class="more" aria-label="Add measure">+</button>';
+    head.appendChild(stepper);
+
+    timeSel.addEventListener('change', function () {
+      if (player.playing) player.stop();
+      state.systems[sysIdx].time = timeSel.value;
+      const shrunk = fitSystemDurations(state.systems[sysIdx]);
+      save(); renderAll();
+      if (shrunk > 0) showToast(shrunk + ' note' + (shrunk > 1 ? 's' : '') + ' shrunk to fit');
+    });
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'btn-tiny remove-system';
+    removeBtn.setAttribute('aria-label', 'Remove line ' + (sysIdx + 1));
+    removeBtn.textContent = 'Remove line';
+    head.appendChild(removeBtn);
+
+    const container = document.createElement('div');
+    container.className = 'staff-container';
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'staff');
+    svg.setAttribute('viewBox', '0 0 1000 200');
+    svg.setAttribute('preserveAspectRatio', 'xMinYMid meet');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('data-system', sysIdx);
+    container.appendChild(svg);
+    sheet.appendChild(head);
+    sheet.appendChild(container);
+
+    stepper.querySelector('.less').addEventListener('click', function () {
+      const sys = state.systems[sysIdx];
+      if (sys.slots <= 1) return;
+      if (player.playing) player.stop();
+      sys.slots--;
+      const cmaps = [sys.content];
+      if (sys.kind === 'piano' && sys.bassContent) cmaps.push(sys.bassContent);
+      cmaps.forEach(function (cm) {
+        Object.keys(cm).forEach(function (k) {
+          if (parseInt(k, 10) >= sys.slots) delete cm[k];
+        });
+      });
+      save(); renderAll();
+    });
+    stepper.querySelector('.more').addEventListener('click', function () {
+      const sys = state.systems[sysIdx];
+      if (sys.slots >= 16) return;
+      sys.slots++;
+      save(); renderAll();
+    });
+    removeBtn.addEventListener('click', function () {
+      if (state.systems.length <= 1) { showToast('Need at least one line'); return; }
+      if (player.playing) player.stop();
+      state.systems.splice(sysIdx, 1);
+      save(); renderAll();
+    });
+
+    svg.addEventListener('click', function (e) {
+      const target = e.target.closest('.slot-target');
+      if (!target) return;
+      const slot = parseInt(target.getAttribute('data-slot'), 10);
+      const sIdx = parseInt(target.getAttribute('data-system'), 10);
+      const evtAttr = target.getAttribute('data-event');
+      const evtIdx = evtAttr === 'new' ? null : parseInt(evtAttr, 10);
+      const staff = target.getAttribute('data-staff') || 'treble';
+      if (state.mode === 'chord') handleChordClick(sIdx, slot, evtIdx, staff);
+      else handleNoteClick(sIdx, slot, evtIdx, e, svg, staff);
+    });
+    svg.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const target = e.target.closest('.slot-target');
+      if (!target) return;
+      e.preventDefault();
+      const slot = parseInt(target.getAttribute('data-slot'), 10);
+      const sIdx = parseInt(target.getAttribute('data-system'), 10);
+      const evtAttr = target.getAttribute('data-event');
+      const evtIdx = evtAttr === 'new' ? null : parseInt(evtAttr, 10);
+      const staff = target.getAttribute('data-staff') || 'treble';
+      if (state.mode === 'chord') handleChordClick(sIdx, slot, evtIdx, staff);
+      else {
+        // Keyboard: place/toggle middle-of-staff note in a note event (new or edit existing)
+        const sys = state.systems[sIdx];
+        const content = systemContent(sys, staff);
+        const events = measureEvents(content[slot]).slice();
+        const defaultPos = 6;
+        if (evtIdx == null || !events[evtIdx] || events[evtIdx].kind !== 'notes') {
+          const mBeats = measureBeats(parseTime(sys.time));
+          const remaining = mBeats - usedBeats(events);
+          if (remaining <= 0) { showToast('Measure is full'); return; }
+          const dur = fitDurationToMeasure(state.duration, remaining);
+          events.push({ kind: 'notes', notes: [{ position: defaultPos, accidental: state.accidental }], duration: dur });
+        } else {
+          const evt = Object.assign({}, events[evtIdx]);
+          const notes = (evt.notes || []).slice();
+          const idx = notes.findIndex(function (n) { return n.position === defaultPos; });
+          if (idx >= 0) notes.splice(idx, 1);
+          else notes.push({ position: defaultPos, accidental: state.accidental });
+          if (notes.length === 0) { events.splice(evtIdx, 1); }
+          else { evt.notes = notes; events[evtIdx] = evt; }
+        }
+        setMeasureIn(content, slot, events);
+        save(); renderAll();
+      }
+    });
+
+    return { sheet: sheet, svg: svg, countEl: stepper.querySelector('.count'), removeBtn: removeBtn };
+  }
+
+  function renderAll() {
+    systemsHost.innerHTML = '';
+    state.systems.forEach(function (sys, i) {
+      const built = makeSystemElement(i);
+      systemsHost.appendChild(built.sheet);
+      renderSystemStaff(built.svg, i, true);
+      built.countEl.textContent = sys.slots;
+      built.removeBtn.hidden = state.systems.length <= 1;
+    });
+
+    if (document.activeElement !== nameInput) nameInput.value = state.name;
+    const tempoEl = document.getElementById('tempo-value');
+    if (tempoEl) tempoEl.textContent = state.tempo;
+    document.body.setAttribute('data-mode', state.mode);
+    document.getElementById('mode-chord').setAttribute('aria-pressed', state.mode === 'chord' ? 'true' : 'false');
+    document.getElementById('mode-notes').setAttribute('aria-pressed', state.mode === 'notes' ? 'true' : 'false');
+    document.getElementById('accidentals-wrap').hidden = state.mode !== 'notes';
+    document.getElementById('mode-hint').textContent = state.mode === 'chord'
+      ? 'Click a measure to place a chord — the current duration applies.'
+      : 'Click the staff to place a notehead at the nearest line or space. Click again to remove.';
+    document.querySelectorAll('.modifier-group [data-acc]').forEach(function (b) {
+      b.setAttribute('aria-pressed', parseInt(b.getAttribute('data-acc'), 10) === state.accidental ? 'true' : 'false');
+    });
+    document.querySelectorAll('.modifier-group [data-dur]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-dur') === state.duration ? 'true' : 'false');
+    });
+    renderFifths();
+  }
+
+  // --- Picker ---
+  const pickerModal = document.getElementById('picker-modal');
+  const pickerSub = document.getElementById('picker-sub');
+  const previewName = document.getElementById('preview-name');
+  const previewSvg = document.getElementById('preview-svg');
+  const btnRemove = document.getElementById('btn-remove-chord');
+  let picker = { sysIdx: 0, slot: null, evtIdx: null, root: 'C', quality: '', duration: 'quarter', isNew: true };
+
+  function handleChordClick(sysIdx, slot, evtIdx, staff) {
+    staff = staff || 'treble';
+    const sys = state.systems[sysIdx];
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[slot]);
+    if (evtIdx == null) {
+      // Trailing zone — add new chord event
+      const mBeats = measureBeats(parseTime(sys.time));
+      const remaining = mBeats - usedBeats(events);
+      if (remaining <= 0) { showToast('Measure is full'); return; }
+      const dur = fitDurationToMeasure(state.duration, remaining);
+      openPicker(sysIdx, slot, null, { root: 'C', quality: '', duration: dur }, staff);
+    } else {
+      const evt = events[evtIdx];
+      if (!evt) return;
+      openPicker(sysIdx, slot, evtIdx, evt.kind === 'chord'
+        ? { root: evt.root, quality: evt.quality, duration: eventDuration(evt) }
+        : { root: 'C', quality: '', duration: eventDuration(evt) }, staff);
+    }
+  }
+
+  function openPicker(sysIdx, slot, evtIdx, seed, staff) {
+    seed = seed || { root: 'C', quality: '', duration: state.duration };
+    staff = staff || 'treble';
+    const sys = state.systems[sysIdx];
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[slot]);
+    const existingEvt = evtIdx != null ? events[evtIdx] : null;
+    picker = {
+      sysIdx: sysIdx, slot: slot, evtIdx: evtIdx, staff: staff,
+      root: seed.root, quality: seed.quality, duration: seed.duration,
+      isNew: evtIdx == null,
+    };
+    pickerSub.textContent = (existingEvt
+      ? (existingEvt.kind === 'chord' ? 'Edit chord' : 'Replace notes with chord')
+      : 'Add chord')
+      + ' — line ' + (sysIdx + 1) + (sys.kind === 'piano' ? ' (' + staff + ')' : '')
+      + ', measure ' + (slot + 1)
+      + (evtIdx != null ? ', event ' + (evtIdx + 1) : '');
+    btnRemove.hidden = evtIdx == null;
+    renderPicker();
+    pickerModal.classList.add('open');
+    const first = document.querySelector('#root-row .picker-btn.selected') || document.querySelector('#root-row .picker-btn');
+    if (first) first.focus();
+  }
+  function closePicker() { pickerModal.classList.remove('open'); }
+
+  function renderPicker() {
+    const rootRow = document.getElementById('root-row');
+    rootRow.innerHTML = '';
+    ROOTS.forEach(function (r) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'picker-btn' + (r === picker.root ? ' selected' : '');
+      b.textContent = prettyRoot(r);
+      b.addEventListener('click', function () { picker.root = r; renderPicker(); });
+      rootRow.appendChild(b);
+    });
+    const qRow = document.getElementById('quality-row');
+    qRow.innerHTML = '';
+    QUALITIES.forEach(function (q) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'picker-btn quality' + (q.id === picker.quality ? ' selected' : '');
+      b.textContent = q.label;
+      b.addEventListener('click', function () { picker.quality = q.id; renderPicker(); });
+      qRow.appendChild(b);
+    });
+    // Duration row (constrained to what fits in this measure)
+    const sys = state.systems[picker.sysIdx];
+    const pickerContent = systemContent(sys, picker.staff || 'treble');
+    const mBeats = measureBeats(parseTime(sys.time));
+    const otherBeats = usedBeats(measureEvents(pickerContent[picker.slot])) - (picker.evtIdx != null
+      ? DURATIONS[eventDuration(measureEvents(pickerContent[picker.slot])[picker.evtIdx])].beats
+      : 0);
+    const availableBeats = mBeats - Math.max(0, otherBeats);
+    const dRow = document.getElementById('duration-row');
+    dRow.innerHTML = '';
+    DURATION_ORDER.forEach(function (d) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const fits = DURATIONS[d].beats <= availableBeats + 1e-6;
+      b.className = 'picker-btn quality' + (d === picker.duration ? ' selected' : '');
+      b.disabled = !fits;
+      b.style.opacity = fits ? '' : '0.4';
+      b.style.cursor = fits ? 'pointer' : 'not-allowed';
+      const glyphs = { whole: '𝅝', half: '𝅗𝅥', quarter: '𝅘𝅥', eighth: '𝅘𝅥𝅮' };
+      b.innerHTML = '<span style="font-family: var(--f-music); font-size: 15px; margin-right: 4px;">' + glyphs[d] + '</span>' + d;
+      if (fits) b.addEventListener('click', function () { picker.duration = d; renderPicker(); });
+      dRow.appendChild(b);
+    });
+    if (DURATIONS[picker.duration].beats > availableBeats + 1e-6) {
+      picker.duration = fitDurationToMeasure(picker.duration, availableBeats);
+    }
+    previewName.textContent = chordName(picker.root, picker.quality);
+    renderMiniStaff(previewSvg, picker.root, picker.quality, picker.staff || 'treble');
+  }
+
+  function renderMiniStaff(svg, root, quality, staff) {
+    staff = staff || 'treble';
+    const cfg = CLEFS[staff];
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute('viewBox', '0 0 220 130');
+    const W = 220;
+    const topY = 42, spacing = 10;
+    const bottomY = topY + 4 * spacing;
+    for (let i = 0; i < 5; i++) {
+      const y = topY + i * spacing;
+      svg.appendChild(el('line', { x1: 24, y1: y, x2: W - 10, y2: y, stroke: 'var(--staff)', 'stroke-width': 1 }));
+    }
+    svg.appendChild(el('line', { x1: 24, y1: topY, x2: 24, y2: bottomY, stroke: 'var(--staff)', 'stroke-width': 1.2 }));
+    const miniClefSize = staff === 'bass' ? 40 : 60;
+    const miniClefY = bottomY + (staff === 'bass' ? -16 : 4);
+    svg.appendChild(el('text', { x: 10, y: miniClefY, 'font-family': 'var(--f-music)', 'font-size': miniClefSize, fill: 'var(--staff)' }, cfg.glyph));
+    drawNotesCluster(svg, chordNotes(root, quality, staff), 140, null, {
+      spacing: spacing, bottomY: bottomY,
+      ledgerHalf: 9, noteRx: 5.8, noteRy: 4.2,
+      accSize: 14, accOffset: 9, duration: state.duration,
+    });
+  }
+
+  // --- Toast / play ---
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () { t.classList.remove('show'); }, 1800);
+  }
+  const btnPlay = document.getElementById('btn-play');
+  const btnPlayLabel = document.getElementById('btn-play-label');
+  function setPlayingSlot(sysIdx, slotIdx, evtIdx, staff) {
+    if (sysIdx == null) {
+      document.querySelectorAll('.slot-target[data-playing]').forEach(function (el) { el.removeAttribute('data-playing'); });
+      return;
+    }
+    const svg = document.querySelector('svg.staff[data-system="' + sysIdx + '"]');
+    if (!svg) return;
+    // Clear only highlights on the same staff of the same system (keeps other staff's current highlight intact)
+    const staffSel = staff ? '[data-staff="' + staff + '"]' : '';
+    svg.querySelectorAll('.slot-target[data-playing]' + staffSel).forEach(function (el) { el.removeAttribute('data-playing'); });
+    let sel = null;
+    if (evtIdx != null) {
+      sel = svg.querySelector('.slot-target[data-slot="' + slotIdx + '"][data-event="' + evtIdx + '"]' + staffSel);
+    }
+    if (!sel) sel = svg.querySelector('.slot-target[data-slot="' + slotIdx + '"]' + staffSel);
+    if (sel) sel.setAttribute('data-playing', 'true');
+  }
+  function updatePlayButton() {
+    if (player.playing) {
+      btnPlay.classList.add('playing');
+      btnPlay.setAttribute('aria-label', 'Stop playback');
+      btnPlayLabel.textContent = 'Stop';
+    } else {
+      btnPlay.classList.remove('playing');
+      btnPlay.setAttribute('aria-label', 'Play all lines');
+      btnPlayLabel.textContent = 'Play';
+    }
+  }
+
+  const player = {
+    playing: false, timers: [],
+    start: function () {
+      if (this.playing) { this.stop(); return; }
+      const ctx = synth.ensure();
+      if (!ctx) { showToast('Audio not available'); return; }
+
+      // Each item is a scheduled sound/highlight at an absolute beat offset from the system's start.
+      const scheduled = [];
+      let totalBeats = 0;
+      state.systems.forEach(function (sys, sysIdx) {
+        const mBeats = measureBeats(parseTime(sys.time));
+        const frames = staffFrames(sys);
+        const sysStart = totalBeats;
+        frames.forEach(function (f) {
+          const contentMap = systemContent(sys, f.staff);
+          for (let i = 0; i < sys.slots; i++) {
+            const events = measureEvents(contentMap[i]);
+            const measureStart = sysStart + i * mBeats;
+            let beatCursor = 0;
+            events.forEach(function (evt, evtIdx) {
+              const b = DURATIONS[eventDuration(evt)].beats;
+              scheduled.push({
+                sysIdx: sysIdx, slotIdx: i, evtIdx: evtIdx, staff: f.staff, clef: f.clef,
+                evt: evt, beats: b, startBeat: measureStart + beatCursor,
+              });
+              beatCursor += b;
+            });
+          }
+        });
+        totalBeats += sys.slots * mBeats;
+      });
+      if (scheduled.length === 0) { showToast('Add chords or notes first'); return; }
+
+      this.playing = true;
+      const beat = 60 / state.tempo;
+      const t0 = ctx.currentTime + 0.08;
+      const self = this;
+      let endBeat = 0;
+      scheduled.forEach(function (it) {
+        const when = t0 + it.startBeat * beat;
+        const dur = it.beats * beat;
+        synth.playNotes(eventNotes(it.evt, it.clef), when, dur * 0.92);
+        const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
+        self.timers.push(setTimeout(function () { setPlayingSlot(it.sysIdx, it.slotIdx, it.evtIdx, it.staff); }, delayMs));
+        if (it.startBeat + it.beats > endBeat) endBeat = it.startBeat + it.beats;
+      });
+      const totalMs = Math.max(0, endBeat * beat * 1000 + 140);
+      this.timers.push(setTimeout(function () { self.finish(); }, totalMs));
+      updatePlayButton();
+    },
+    finish: function () {
+      this.timers.forEach(clearTimeout);
+      this.timers = [];
+      this.playing = false;
+      setPlayingSlot(null);
+      updatePlayButton();
+    },
+    stop: function () { synth.stopAll(); this.finish(); },
+  };
+
+  // --- Export ---
+  function resolveVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function drawSystemToSvg(parent, sysIdx, offsetY, colors) {
+    const g = document.createElementNS(SVG_NS, 'g');
+    g.setAttribute('transform', 'translate(0,' + offsetY + ')');
+    parent.appendChild(g);
+    const sys = state.systems[sysIdx];
+    const frames = staffFrames(sys);
+    const mBeats = measureBeats(parseTime(sys.time));
+    const playLeft = playableLeftEdge();
+    const sw = slotWidth(sys.slots);
+    const rx = STAFF.W - STAFF.rightMargin;
+
+    if (sys.kind === 'piano') {
+      const top = frames[0].topY, bot = frames[1].bottomY;
+      const bx = STAFF.leftMargin - 14;
+      g.appendChild(el('path', {
+        d: 'M' + bx + ' ' + top + ' Q' + (bx - 10) + ' ' + ((top + bot) / 2) + ' ' + bx + ' ' + bot,
+        fill: 'none', stroke: colors.staff, 'stroke-width': 3, 'stroke-linecap': 'round',
+      }));
+    }
+
+    frames.forEach(function (f) {
+      for (let i = 0; i < 5; i++) {
+        const y = f.topY + i * STAFF.spacing;
+        g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: y, x2: rx, y2: y, stroke: colors.staff, 'stroke-width': 1.15 }));
+      }
+      g.appendChild(el('line', { x1: STAFF.leftMargin - 6, y1: f.topY, x2: STAFF.leftMargin - 6, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.5 }));
+      const cfg = CLEFS[f.clef];
+      g.appendChild(el('text', { x: 8, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'Noto Music, Bravura, Segoe UI Symbol, serif', 'font-size': cfg.glyphFontSize, fill: colors.staff }, cfg.glyph));
+      drawKeySignature(g, state.key, { startX: STAFF.leftMargin, bottomY: f.bottomY, clef: f.clef, colorInk: colors.staff });
+      drawTimeSignature(g, sys.time || '4/4', { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
+      for (let i = 1; i < sys.slots; i++) {
+        const x = playLeft + sw * i;
+        g.appendChild(el('line', { x1: x, y1: f.topY, x2: x, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 0.9, opacity: 0.55 }));
+      }
+      g.appendChild(el('line', { x1: rx - 5, y1: f.topY, x2: rx - 5, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 1.1 }));
+      g.appendChild(el('line', { x1: rx, y1: f.topY, x2: rx, y2: f.bottomY, stroke: colors.staff, 'stroke-width': 2 }));
+      if (f.staff === 'treble') {
+        for (let i = 0; i < sys.slots; i++) {
+          const x = playLeft + sw * i + 4;
+          g.appendChild(el('text', { x: x, y: f.topY - 6, 'font-family': 'Inter, system-ui, sans-serif', 'font-size': 9, 'font-weight': 500, fill: colors.inkSoft, opacity: 0.7 }, String(i + 1)));
+        }
+      }
+      const contentMap = systemContent(sys, f.staff);
+      for (let i = 0; i < sys.slots; i++) {
+        const items = layoutEvents(contentMap[i]);
+        if (items.length === 0) continue;
+        const mLeft = playLeft + sw * i;
+        const mWidth = sw;
+        const insetX = Math.max(10, mWidth * 0.08);
+        items.forEach(function (it) {
+          const cx = mLeft + (it.startBeat / mBeats) * mWidth + insetX;
+          const alloc = (it.beats / mBeats) * mWidth;
+          const labelSize = Math.max(12, Math.min(21, alloc * 0.45));
+          const e = it.evt;
+          if (e.kind === 'chord') {
+            drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+          } else if (e.kind === 'notes') {
+            drawNotesCluster(g, (e.notes || []).map(function (n) { return expandNote(n, f.clef); }), cx, null, { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+          }
+        });
+      }
+    });
+  }
+
+  function serializeStaff() {
+    const colors = {
+      staff: resolveVar('--staff') || '#231c14',
+      accent: resolveVar('--accent') || '#7a1e26',
+      paper: resolveVar('--paper') || '#faf4e4',
+      inkSoft: resolveVar('--ink-soft') || '#8d7d69',
+      ink: resolveVar('--ink') || '#1c1711',
+    };
+    const titleH = 36;
+    const nSys = state.systems.length;
+    const sysHs = state.systems.map(systemSvgHeight);
+    const H = titleH + sysHs.reduce(function (a, b) { return a + b; }, 0);
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('xmlns', SVG_NS);
+    svg.setAttribute('viewBox', '0 0 ' + STAFF.W + ' ' + H);
+    svg.setAttribute('width', STAFF.W * 2);
+    svg.setAttribute('height', H * 2);
+    svg.appendChild(el('rect', { x: 0, y: 0, width: STAFF.W, height: H, fill: colors.paper }));
+    svg.appendChild(el('text', {
+      x: STAFF.W / 2, y: 24, 'text-anchor': 'middle',
+      'font-family': 'Fraunces, Georgia, serif', 'font-style': 'italic', 'font-weight': 600, 'font-size': 20, fill: colors.ink,
+    }, (state.name || 'Untitled Progression') + '  ·  ' + prettyKey(state.key)));
+    let yCursor = titleH;
+    for (let i = 0; i < nSys; i++) {
+      drawSystemToSvg(svg, i, yCursor, colors);
+      yCursor += sysHs[i];
+    }
+    const str = new XMLSerializer().serializeToString(svg);
+    return { url: 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str), width: STAFF.W, height: H };
+  }
+
+  function renderToPNG() {
+    return new Promise(function (resolve, reject) {
+      const paperColor = resolveVar('--paper') || '#faf4e4';
+      const out = serializeStaff();
+      const img = new Image();
+      img.onload = function () {
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = out.width * scale;
+        canvas.height = out.height * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = paperColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas);
+      };
+      img.onerror = function () { reject(new Error('Failed to render staff image.')); };
+      img.src = out.url;
+    });
+  }
+
+  function slugify(s) {
+    return (s || 'chord-sheet').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'chord-sheet';
+  }
+  function showExport(dataUrl) {
+    document.getElementById('export-img').src = dataUrl;
+    document.getElementById('export-modal').classList.add('open');
+  }
+
+  let downloadsNs = null, downloadsResolved = false;
+  async function getDownloads() {
+    if (downloadsResolved) return downloadsNs;
+    try {
+      downloadsNs = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+    } catch (e) { downloadsNs = null; }
+    downloadsResolved = true;
+    return downloadsNs;
+  }
+
+  // --- Note click handling (needs the clicked svg to compute coords) ---
+  function handleNoteClick(sysIdx, slot, evtIdx, event, svg, staff) {
+    staff = staff || 'treble';
+    const sys = state.systems[sysIdx];
+    const frames = staffFrames(sys);
+    const frame = frames.find(function (f) { return f.staff === staff; }) || frames[0];
+    const pt = svg.createSVGPoint();
+    pt.x = event.clientX; pt.y = event.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const position = positionFromY(p.y, frame.bottomY);
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[slot]).slice();
+    const mBeats = measureBeats(parseTime(sys.time));
+    let addedNote = null;
+
+    if (evtIdx == null) {
+      const remaining = mBeats - usedBeats(events);
+      if (remaining <= 0) { showToast('Measure is full'); return; }
+      const dur = fitDurationToMeasure(state.duration, remaining);
+      const noteRec = { position: position, accidental: state.accidental };
+      events.push({ kind: 'notes', notes: [noteRec], duration: dur });
+      addedNote = noteRec;
+    } else {
+      const evt = events[evtIdx];
+      if (!evt) return;
+      let notes;
+      let duration = eventDuration(evt);
+      if (evt.kind === 'notes') {
+        notes = (evt.notes || []).slice();
+      } else {
+        notes = chordNotes(evt.root, evt.quality, staff).map(function (n) {
+          return { position: n.position, accidental: n.accidental };
+        });
+      }
+      const idx = notes.findIndex(function (n) { return n.position === position; });
+      if (idx >= 0) {
+        if ((notes[idx].accidental || 0) === state.accidental) notes.splice(idx, 1);
+        else { notes[idx] = { position: position, accidental: state.accidental }; addedNote = notes[idx]; }
+      } else {
+        const noteRec = { position: position, accidental: state.accidental };
+        notes.push(noteRec);
+        addedNote = noteRec;
+      }
+      if (notes.length === 0) {
+        events.splice(evtIdx, 1);
+      } else {
+        events[evtIdx] = { kind: 'notes', notes: notes, duration: duration };
+      }
+    }
+    setMeasureIn(content, slot, events);
+    save(); renderAll();
+    if (addedNote) synth.playNotes([expandNote(addedNote, staff)], 0, 0.6);
+  }
+
+  // --- Circle of Fifths ---
+  const cofHost = document.querySelector('.cof');
+  CIRCLE_KEYS.forEach(function (k, i) {
+    const angle = i * 30 - 90;
+    const rad = angle * Math.PI / 180;
+    const r = 118;
+    const cx = 150 + r * Math.cos(rad);
+    const cy = 150 + r * Math.sin(rad);
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cof-key';
+    b.setAttribute('data-key', k);
+    b.setAttribute('aria-pressed', 'false');
+    b.setAttribute('aria-label', prettyKey(k));
+    b.textContent = prettyRoot(k);
+    b.style.left = (cx / 300 * 100) + '%';
+    b.style.top = (cy / 300 * 100) + '%';
+    b.addEventListener('click', function () {
+      state.key = k; save(); renderAll();
+    });
+    cofHost.appendChild(b);
+  });
+
+  function renderFifths() {
+    const info = KEYS[state.key];
+    document.getElementById('cof-name').textContent = prettyRoot(state.key);
+    const sigGlyph = info.sharps ? Array(info.sharps + 1).join('♯') : (info.flats ? Array(info.flats + 1).join('♭') : '♮');
+    document.getElementById('cof-sig').textContent = sigGlyph;
+    document.getElementById('cof-rel').textContent = 'rel. ' + prettyRoot(info.rel) + ' min';
+    document.getElementById('cof-detail-sig').textContent = info.sharps
+      ? (info.sharps + ' sharp' + (info.sharps > 1 ? 's' : ''))
+      : info.flats ? (info.flats + ' flat' + (info.flats > 1 ? 's' : '')) : 'no sharps or flats';
+    const diatonic = diatonicChords(state.key);
+    const diaWrap = document.getElementById('cof-detail-diatonic');
+    diaWrap.innerHTML = '';
+    diatonic.forEach(function (d) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.textContent = prettyRoot(d.label);
+      chip.title = d.degree;
+      diaWrap.appendChild(chip);
+    });
+    document.getElementById('cof-detail-dom').textContent = prettyRoot(diatonic[4].label);
+    document.getElementById('sheet-key-value').textContent = prettyKey(state.key);
+    cofHost.querySelectorAll('.cof-key').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-key') === state.key ? 'true' : 'false');
+    });
+  }
+
+  // --- Toolbar events ---
+  document.getElementById('btn-cancel').addEventListener('click', closePicker);
+  document.getElementById('btn-confirm').addEventListener('click', function () {
+    const sys = state.systems[picker.sysIdx];
+    const staff = picker.staff || 'treble';
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[picker.slot]).slice();
+    const mBeats = measureBeats(parseTime(sys.time));
+    const newEvt = { kind: 'chord', root: picker.root, quality: picker.quality, duration: picker.duration };
+    if (picker.evtIdx == null) {
+      const remaining = mBeats - usedBeats(events);
+      newEvt.duration = fitDurationToMeasure(newEvt.duration, remaining);
+      events.push(newEvt);
+    } else {
+      events[picker.evtIdx] = newEvt;
+      let acc = 0;
+      for (let i = 0; i < events.length; i++) {
+        const remaining = mBeats - acc;
+        if (remaining <= 0) { events.length = i; break; }
+        events[i].duration = fitDurationToMeasure(eventDuration(events[i]), remaining);
+        acc += DURATIONS[eventDuration(events[i])].beats;
+      }
+    }
+    setMeasureIn(content, picker.slot, events);
+    save(); renderAll(); closePicker();
+  });
+  btnRemove.addEventListener('click', function () {
+    const sys = state.systems[picker.sysIdx];
+    const staff = picker.staff || 'treble';
+    const content = systemContent(sys, staff);
+    const events = measureEvents(content[picker.slot]).slice();
+    if (picker.evtIdx != null) events.splice(picker.evtIdx, 1);
+    setMeasureIn(content, picker.slot, events);
+    save(); renderAll(); closePicker();
+  });
+  pickerModal.addEventListener('click', function (e) {
+    if (e.target === pickerModal) closePicker();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      closePicker();
+      document.getElementById('export-modal').classList.remove('open');
+    }
+  });
+
+  nameInput.addEventListener('input', function (e) {
+    state.name = e.target.value || 'Untitled Progression';
+    save();
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', function () {
+    const hasAny = state.systems.some(function (s) { return Object.keys(s.content).length > 0; });
+    if (!hasAny) return;
+    if (player.playing) player.stop();
+    state.systems.forEach(function (s) { s.content = {}; });
+    save(); renderAll();
+    showToast('Cleared');
+  });
+
+  document.getElementById('btn-add-system').addEventListener('click', function () {
+    state.systems.push({ slots: 4, time: '4/4', content: {}, kind: 'treble' });
+    save(); renderAll();
+    const svgs = document.querySelectorAll('svg.staff');
+    const last = svgs[svgs.length - 1];
+    if (last && last.scrollIntoView) last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  document.getElementById('btn-add-piano-line').addEventListener('click', function () {
+    state.systems.push({ slots: 4, time: '4/4', content: {}, bassContent: {}, kind: 'piano' });
+    save(); renderAll();
+    const svgs = document.querySelectorAll('svg.staff');
+    const last = svgs[svgs.length - 1];
+    if (last && last.scrollIntoView) last.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  btnPlay.addEventListener('click', function () { player.start(); });
+  document.getElementById('btn-tempo-less').addEventListener('click', function () {
+    state.tempo = Math.max(40, state.tempo - 4); save(); renderAll();
+  });
+  document.getElementById('btn-tempo-more').addEventListener('click', function () {
+    state.tempo = Math.min(220, state.tempo + 4); save(); renderAll();
+  });
+  document.getElementById('btn-preview-play').addEventListener('click', function () {
+    synth.stopAll();
+    const notes = chordNotes(picker.root, picker.quality, picker.staff || 'treble');
+    synth.playNotes(notes, 0, 1.3);
+  });
+
+  document.getElementById('mode-chord').addEventListener('click', function () {
+    if (state.mode === 'chord') return;
+    state.mode = 'chord'; save(); renderAll();
+  });
+  document.getElementById('mode-notes').addEventListener('click', function () {
+    if (state.mode === 'notes') return;
+    state.mode = 'notes'; save(); renderAll();
+  });
+  document.querySelectorAll('.modifier-group [data-acc]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.accidental = parseInt(b.getAttribute('data-acc'), 10); save(); renderAll();
+    });
+  });
+  document.querySelectorAll('.modifier-group [data-dur]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.duration = b.getAttribute('data-dur'); save(); renderAll();
+    });
+  });
+
+  document.getElementById('btn-download').addEventListener('click', async function () {
+    try {
+      const canvas = await renderToPNG();
+      const dataUrl = canvas.toDataURL('image/png');
+      const filename = slugify(state.name) + '.png';
+      const dl = await getDownloads();
+      if (dl && typeof dl.save === 'function') {
+        try {
+          const blob = await new Promise(function (res) { canvas.toBlob(res, 'image/png'); });
+          await dl.save({ filename: filename, data: blob || dataUrl });
+          showToast('Saved');
+          return;
+        } catch (err) { /* fall through */ }
+      }
+      showExport(dataUrl);
+    } catch (e) {
+      showToast('Could not render image');
+    }
+  });
+
+  document.getElementById('btn-copy').addEventListener('click', async function () {
+    try {
+      const canvas = await renderToPNG();
+      canvas.toBlob(async function (blob) {
+        if (!blob) { showToast('Could not create image'); return; }
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+            showToast('Image copied to clipboard');
+            return;
+          }
+          throw new Error('Clipboard image unsupported');
+        } catch (err) {
+          const reader = new FileReader();
+          reader.onload = function () { showExport(reader.result); };
+          reader.readAsDataURL(blob);
+        }
+      }, 'image/png');
+    } catch (e) {
+      showToast('Could not render image');
+    }
+  });
+
+  function serializeState() {
+    return {
+      app: 'chord-staff',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      name: state.name, tempo: state.tempo,
+      mode: state.mode, accidental: state.accidental, duration: state.duration,
+      key: state.key, systems: state.systems,
+    };
+  }
+
+  function applyImported(parsed) {
+    if (!parsed || typeof parsed !== 'object') throw new Error('Not a chord-staff file');
+    if (typeof parsed.name === 'string') state.name = parsed.name;
+    if (typeof parsed.tempo === 'number') state.tempo = parsed.tempo;
+    if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
+    if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
+    if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+    if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
+    if (Array.isArray(parsed.systems) && parsed.systems.length) {
+      state.systems = parsed.systems.map(function (s) {
+        const kind = s.kind === 'piano' ? 'piano' : 'treble';
+        const out = {
+          slots: typeof s.slots === 'number' ? s.slots : 8,
+          time: TIME_SIGS.indexOf(s.time) >= 0 ? s.time : '4/4',
+          content: migrateContent(s.content),
+          kind: kind,
+        };
+        if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+        return out;
+      });
+    } else if (parsed.content && typeof parsed.content === 'object') {
+      state.systems = [{ slots: parsed.slots || 8, time: '4/4', content: migrateContent(parsed.content), kind: 'treble' }];
+    } else {
+      throw new Error('No systems or content to import');
+    }
+  }
+
+  document.getElementById('btn-export-json').addEventListener('click', async function () {
+    try {
+      const data = JSON.stringify(serializeState(), null, 2);
+      const filename = slugify(state.name) + '.json';
+      const blob = new Blob([data], { type: 'application/json' });
+      const dl = await getDownloads();
+      if (dl && typeof dl.save === 'function') {
+        try {
+          await dl.save({ filename: filename, data: blob });
+          showToast('Exported ' + filename);
+          return;
+        } catch (err) { /* fall through */ }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      showToast('Exported ' + filename);
+    } catch (e) {
+      showToast('Could not export');
+    }
+  });
+
+  const jsonFileInput = document.getElementById('json-file-input');
+  document.getElementById('btn-import-json').addEventListener('click', function () {
+    jsonFileInput.value = '';
+    jsonFileInput.click();
+  });
+  jsonFileInput.addEventListener('change', function (e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function () {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (player.playing) player.stop();
+        applyImported(parsed);
+        save(); renderAll();
+        showToast('Imported ' + file.name);
+      } catch (err) {
+        showToast('Invalid JSON file');
+      }
+    };
+    reader.onerror = function () { showToast('Could not read file'); };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('btn-close-export').addEventListener('click', function () {
+    document.getElementById('export-modal').classList.remove('open');
+  });
+  document.getElementById('export-modal').addEventListener('click', function (e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+
+  renderAll();
+})();
+</script>
