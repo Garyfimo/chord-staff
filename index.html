@@ -2422,8 +2422,17 @@
   const btnPlay = document.getElementById('btn-play');
   const btnPlayLabel = document.getElementById('btn-play-label');
   function setPlayingSlot(sysIdx, slotIdx, evtIdx, staff) {
-    // Only one highlight at a time — clear every existing one across all systems/staves first.
-    document.querySelectorAll('.slot-target[data-playing]').forEach(function (el) { el.removeAttribute('data-playing'); });
+    // Clear policy:
+    //  - Finishing playback (sysIdx == null): remove every highlight.
+    //  - Otherwise: remove highlights on OTHER systems entirely (one system at a time),
+    //    and on the same system remove only the same staff's highlight so a piano grand
+    //    staff keeps the other staff's current highlight (treble + bass play together).
+    document.querySelectorAll('.slot-target[data-playing]').forEach(function (el) {
+      if (sysIdx == null) { el.removeAttribute('data-playing'); return; }
+      const sameSys = el.getAttribute('data-system') === String(sysIdx);
+      if (!sameSys) { el.removeAttribute('data-playing'); return; }
+      if (el.getAttribute('data-staff') === staff) el.removeAttribute('data-playing');
+    });
     if (sysIdx == null) return;
     const svg = document.querySelector('svg.staff[data-system="' + sysIdx + '"]');
     if (!svg) return;
