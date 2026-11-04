@@ -990,9 +990,17 @@
   <button class="btn" id="btn-export-json">Export JSON</button>
   <button class="btn" id="btn-import-json">Import JSON</button>
   <input type="file" id="json-file-input" accept="application/json,.json" hidden />
-  <button class="btn" id="btn-upload-sound" title="Use your own audio sample as the instrument (session only)">Upload sound</button>
-  <button class="btn" id="btn-reset-sound" hidden title="Return to the default synth piano">Reset sound</button>
-  <input type="file" id="sound-file-input" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" hidden />
+  <label class="time-select" for="instrument-select" style="display:inline-flex; align-items:center; gap:6px;">
+    <span>Instrument</span>
+    <select id="instrument-select" aria-label="Instrument sound">
+      <option value="piano" selected>Piano</option>
+      <option value="epiano">Electric piano</option>
+      <option value="organ">Organ</option>
+      <option value="strings">Strings</option>
+      <option value="harpsichord">Harpsichord</option>
+      <option value="choir">Choir</option>
+    </select>
+  </label>
   <button class="btn danger" id="btn-clear">Clear all</button>
   <div class="toolbar-spacer"></div>
   <div class="stepper">
@@ -1792,19 +1800,170 @@
     return 12 * (note.octave + 1) + pitchClass;
   }
   function noteFrequency(note) { return 440 * Math.pow(2, (noteMidi(note) - 69) / 12); }
+
+  // Instrument voices. Each takes (ctx, note, t0, endT, master, active[]) and schedules nodes.
+  const VOICES = {
+    piano: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const octBelow = Math.max(0, Math.log2(220 / Math.max(freq, 55)));
+      const bodyT60 = 1.6 + octBelow * 1.1;
+      const partials = [
+        { mult: 1, amp: 1.00, t60Mult: 1.0 },
+        { mult: 2, amp: 0.55, t60Mult: 0.65 },
+        { mult: 3, amp: 0.28, t60Mult: 0.45 },
+        { mult: 4, amp: 0.14, t60Mult: 0.35 },
+        { mult: 5, amp: 0.06, t60Mult: 0.25 },
+        { mult: 6, amp: 0.03, t60Mult: 0.20 },
+      ];
+      const tailStop = Math.min(t0 + bodyT60 + 0.2, endT + 0.45);
+      partials.forEach(function (p) {
+        const pf = freq * p.mult;
+        if (pf > 12500) return;
+        const osc = ctx.createOscillator();
+        osc.type = 'sine'; osc.frequency.value = pf;
+        const g = ctx.createGain();
+        const tau = (bodyT60 * p.t60Mult) / 6.9;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(p.amp, t0 + 0.004);
+        g.gain.setTargetAtTime(0.0001, t0 + 0.004, tau);
+        g.gain.setTargetAtTime(0.0001, endT, 0.08);
+        osc.connect(g).connect(master);
+        osc.start(t0); osc.stop(tailStop); active.push(osc);
+      });
+      try {
+        const bufDur = 0.05;
+        const bufLen = Math.max(1, Math.ceil(ctx.sampleRate * bufDur));
+        const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+        const src = ctx.createBufferSource(); src.buffer = buf;
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+        bp.frequency.value = Math.min(6000, freq * 2.5); bp.Q.value = 1.6;
+        const hg = ctx.createGain();
+        hg.gain.setValueAtTime(0.0001, t0);
+        hg.gain.exponentialRampToValueAtTime(0.22, t0 + 0.002);
+        hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
+        src.connect(bp).connect(hg).connect(master);
+        src.start(t0); src.stop(t0 + bufDur + 0.02); active.push(src);
+      } catch (e) {}
+    },
+    // Rhodes-style electric piano: sine + bell overtone + tremolo, longer sustain
+    epiano: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const tailStop = endT + 0.6;
+      // Fundamental
+      const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = freq;
+      const g1 = ctx.createGain();
+      g1.gain.setValueAtTime(0.0001, t0);
+      g1.gain.exponentialRampToValueAtTime(0.9, t0 + 0.006);
+      g1.gain.setTargetAtTime(0.0001, endT, 0.25);
+      o1.connect(g1).connect(master);
+      o1.start(t0); o1.stop(tailStop); active.push(o1);
+      // Bell overtone (inharmonic-ish)
+      const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = freq * 3.1;
+      const g2 = ctx.createGain();
+      g2.gain.setValueAtTime(0.0001, t0);
+      g2.gain.exponentialRampToValueAtTime(0.35, t0 + 0.004);
+      g2.gain.exponentialRampToValueAtTime(0.0002, t0 + 0.6);
+      g2.gain.setTargetAtTime(0.0001, endT, 0.12);
+      o2.connect(g2).connect(master);
+      o2.start(t0); o2.stop(tailStop); active.push(o2);
+      // Tremolo on fundamental
+      const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 5;
+      const lfoG = ctx.createGain(); lfoG.gain.value = 0.15;
+      lfo.connect(lfoG).connect(g1.gain);
+      lfo.start(t0); lfo.stop(tailStop); active.push(lfo);
+    },
+    // Hammond-ish drawbar organ: stacked sines, sharp attack, full sustain
+    organ: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const tailStop = endT + 0.08;
+      const drawbars = [ { mult: 0.5, amp: 0.45 }, { mult: 1, amp: 1.0 }, { mult: 2, amp: 0.6 }, { mult: 3, amp: 0.35 }, { mult: 4, amp: 0.22 } ];
+      drawbars.forEach(function (d) {
+        const pf = freq * d.mult;
+        if (pf > 12500 || pf < 25) return;
+        const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = pf;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(d.amp, t0 + 0.006);
+        g.gain.setValueAtTime(d.amp, endT - 0.001);
+        g.gain.exponentialRampToValueAtTime(0.0001, endT + 0.06);
+        osc.connect(g).connect(master);
+        osc.start(t0); osc.stop(tailStop); active.push(osc);
+      });
+    },
+    // Synth strings: sawtooth, slow attack, vibrato, filtered
+    strings: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const tailStop = endT + 0.5;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2800; lp.Q.value = 0.6;
+      lp.connect(master);
+      [0, +7, -7].forEach(function (cents) {
+        const osc = ctx.createOscillator(); osc.type = 'sawtooth';
+        osc.frequency.value = freq * Math.pow(2, cents / 1200);
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.28, t0 + 0.22);
+        g.gain.setValueAtTime(0.28, Math.max(t0 + 0.22, endT - 0.05));
+        g.gain.exponentialRampToValueAtTime(0.0001, endT + 0.35);
+        osc.connect(g).connect(lp);
+        osc.start(t0); osc.stop(tailStop); active.push(osc);
+        // Vibrato
+        const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 5.2;
+        const vibG = ctx.createGain(); vibG.gain.value = freq * 0.004;
+        vib.connect(vibG).connect(osc.frequency);
+        vib.start(t0 + 0.18); vib.stop(tailStop); active.push(vib);
+      });
+    },
+    // Harpsichord: bright sawtooth filtered, very fast attack, short decay
+    harpsichord: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const tailStop = Math.min(endT + 0.4, t0 + 2.2);
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = Math.min(4000, freq * 3); bp.Q.value = 1.2;
+      bp.connect(master);
+      const osc1 = ctx.createOscillator(); osc1.type = 'sawtooth'; osc1.frequency.value = freq;
+      const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = freq * 2.003;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.6, t0 + 0.002);
+      g.gain.setTargetAtTime(0.0001, t0 + 0.002, 0.28);
+      g.gain.setTargetAtTime(0.0001, endT, 0.06);
+      const mix = ctx.createGain(); mix.gain.value = 0.5;
+      osc2.connect(mix); osc1.connect(g); mix.connect(g); g.connect(bp);
+      osc1.start(t0); osc2.start(t0); osc1.stop(tailStop); osc2.stop(tailStop);
+      active.push(osc1, osc2);
+    },
+    // Choir "ahhh": detuned sines, slow attack, airy lowpass
+    choir: function (ctx, note, t0, endT, master, active) {
+      const freq = noteFrequency(note);
+      const tailStop = endT + 0.6;
+      const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2200; lp.Q.value = 0.7;
+      lp.connect(master);
+      [0, +10, -10, +20].forEach(function (cents, i) {
+        const osc = ctx.createOscillator(); osc.type = 'sine';
+        osc.frequency.value = freq * Math.pow(2, cents / 1200);
+        const g = ctx.createGain();
+        const peak = i === 0 ? 0.5 : 0.22;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(peak, t0 + 0.28);
+        g.gain.setValueAtTime(peak, Math.max(t0 + 0.28, endT - 0.08));
+        g.gain.exponentialRampToValueAtTime(0.0001, endT + 0.45);
+        osc.connect(g).connect(lp);
+        osc.start(t0); osc.stop(tailStop); active.push(osc);
+      });
+      // Soft vibrato
+      const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 4.8;
+      const vibG = ctx.createGain(); vibG.gain.value = freq * 0.003;
+      vib.connect(vibG);
+      vib.start(t0); vib.stop(tailStop); active.push(vib);
+    },
+  };
+
   const synth = {
     ctx: null, active: [],
-    sample: null, sampleName: null, sampleBaseMidi: 60, // middle C (C4)
-    hasSample: function () { return !!this.sample; },
-    loadSample: async function (file) {
-      const ctx = this.ensure();
-      if (!ctx) throw new Error('Audio unavailable');
-      const arr = await file.arrayBuffer();
-      const buf = await ctx.decodeAudioData(arr.slice(0));
-      this.sample = buf;
-      this.sampleName = file.name;
-    },
-    clearSample: function () { this.sample = null; this.sampleName = null; },
+    voice: 'piano',
+    setVoice: function (v) { if (VOICES[v]) this.voice = v; },
     ensure: function () {
       if (!this.ctx) {
         const AC = window.AudioContext || window.webkitAudioContext;
@@ -1821,87 +1980,12 @@
       const endT = t0 + duration;
       const master = ctx.createGain();
       master.gain.value = Math.min(0.42, 0.7 / Math.max(1, notes.length));
-      // Gentle lowpass to tame harsh harmonics on top
       const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 7000; tone.Q.value = 0.3;
       master.connect(tone).connect(ctx.destination);
       const self = this;
-
-      // If a custom sample is loaded, use it (pitch-shifted per note) instead of the synth voice
-      if (this.sample) {
-        const buf = this.sample;
-        const baseMidi = this.sampleBaseMidi;
-        notes.forEach(function (note) {
-          const midi = noteMidi(note);
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.playbackRate.value = Math.pow(2, (midi - baseMidi) / 12);
-          const g = ctx.createGain();
-          g.gain.setValueAtTime(0.0001, t0);
-          g.gain.exponentialRampToValueAtTime(1.0, t0 + 0.004);
-          // Hold until key-release, then short exponential fade
-          g.gain.setValueAtTime(1.0, Math.max(t0 + 0.004, endT - 0.001));
-          g.gain.exponentialRampToValueAtTime(0.0001, endT + 0.12);
-          src.connect(g).connect(master);
-          src.start(t0);
-          src.stop(endT + 0.15);
-          self.active.push(src);
-        });
-        return;
-      }
-
-      // Piano-like additive synth: 6 sine partials per note, each with pitch-scaled exponential decay.
-      // A short bandpass-noise burst at onset acts as the hammer strike. setTargetAtTime does the natural
-      // ringing decay; a second setTargetAtTime at note-end applies a damper-like release.
+      const voiceFn = VOICES[this.voice] || VOICES.piano;
       notes.forEach(function (note) {
-        const freq = noteFrequency(note);
-        // Lower notes ring longer, like a real piano.
-        const octBelow = Math.max(0, Math.log2(220 / Math.max(freq, 55)));
-        const bodyT60 = 1.6 + octBelow * 1.1; // seconds to -60dB
-        const partials = [
-          { mult: 1, amp: 1.00, t60Mult: 1.0 },
-          { mult: 2, amp: 0.55, t60Mult: 0.65 },
-          { mult: 3, amp: 0.28, t60Mult: 0.45 },
-          { mult: 4, amp: 0.14, t60Mult: 0.35 },
-          { mult: 5, amp: 0.06, t60Mult: 0.25 },
-          { mult: 6, amp: 0.03, t60Mult: 0.20 },
-        ];
-        const tailStop = Math.min(t0 + bodyT60 + 0.2, endT + 0.45);
-        partials.forEach(function (p) {
-          const pf = freq * p.mult;
-          if (pf > 12500) return;
-          const osc = ctx.createOscillator();
-          osc.type = 'sine';
-          osc.frequency.value = pf;
-          const g = ctx.createGain();
-          const tau = (bodyT60 * p.t60Mult) / 6.9;
-          g.gain.setValueAtTime(0.0001, t0);
-          g.gain.exponentialRampToValueAtTime(p.amp, t0 + 0.004);
-          g.gain.setTargetAtTime(0.0001, t0 + 0.004, tau);
-          // Damper-like release when the note ends
-          g.gain.setTargetAtTime(0.0001, endT, 0.08);
-          osc.connect(g).connect(master);
-          osc.start(t0);
-          osc.stop(tailStop);
-          self.active.push(osc);
-        });
-        // Hammer strike: short filtered noise burst
-        try {
-          const bufDur = 0.05;
-          const bufLen = Math.max(1, Math.ceil(ctx.sampleRate * bufDur));
-          const buf = ctx.createBuffer(1, bufLen, ctx.sampleRate);
-          const data = buf.getChannelData(0);
-          for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
-          const src = ctx.createBufferSource(); src.buffer = buf;
-          const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
-          bp.frequency.value = Math.min(6000, freq * 2.5); bp.Q.value = 1.6;
-          const hg = ctx.createGain();
-          hg.gain.setValueAtTime(0.0001, t0);
-          hg.gain.exponentialRampToValueAtTime(0.22, t0 + 0.002);
-          hg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.05);
-          src.connect(bp).connect(hg).connect(master);
-          src.start(t0); src.stop(t0 + bufDur + 0.02);
-          self.active.push(src);
-        } catch (e) { /* ignore */ }
+        voiceFn(ctx, note, t0, endT, master, self.active);
       });
     },
     stopAll: function () {
@@ -2804,37 +2888,14 @@
     reader.readAsText(file);
   });
 
-  // --- Custom instrument sample (session only) ---
-  const soundFileInput = document.getElementById('sound-file-input');
-  const btnUploadSound = document.getElementById('btn-upload-sound');
-  const btnResetSound = document.getElementById('btn-reset-sound');
-  function refreshSoundButtons() {
-    const on = synth.hasSample();
-    btnUploadSound.textContent = on ? ('Sound: ' + (synth.sampleName || 'custom')) : 'Upload sound';
-    btnResetSound.hidden = !on;
-  }
-  btnUploadSound.addEventListener('click', function () {
-    soundFileInput.value = '';
-    soundFileInput.click();
+  // --- Instrument picker (session only) ---
+  const instrumentSelect = document.getElementById('instrument-select');
+  instrumentSelect.value = synth.voice;
+  instrumentSelect.addEventListener('change', function () {
+    if (player.playing) player.stop();
+    synth.setVoice(instrumentSelect.value);
+    showToast('Instrument: ' + instrumentSelect.options[instrumentSelect.selectedIndex].text);
   });
-  btnResetSound.addEventListener('click', function () {
-    synth.clearSample();
-    refreshSoundButtons();
-    showToast('Default piano restored');
-  });
-  soundFileInput.addEventListener('change', async function (e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    try {
-      if (player.playing) player.stop();
-      await synth.loadSample(file);
-      refreshSoundButtons();
-      showToast('Custom sound loaded (treated as middle C)');
-    } catch (err) {
-      showToast('Could not decode audio file');
-    }
-  });
-  refreshSoundButtons();
 
   document.getElementById('btn-close-export').addEventListener('click', function () {
     document.getElementById('export-modal').classList.remove('open');
