@@ -1026,6 +1026,12 @@
       <option value="choir">Choir</option>
     </select>
   </label>
+  <label class="time-select" for="midi-input-select" style="display:inline-flex; align-items:center; gap:6px;">
+    <span>MIDI in</span>
+    <select id="midi-input-select" aria-label="MIDI input device">
+      <option value="">— none —</option>
+    </select>
+  </label>
   <button class="btn danger" id="btn-clear">Clear all</button>
   <div class="toolbar-spacer"></div>
   <div class="stepper">
@@ -3035,6 +3041,81 @@
     synth.setVoice(instrumentSelect.value);
     showToast('Instrument: ' + instrumentSelect.options[instrumentSelect.selectedIndex].text);
   });
+
+  // --- MIDI input (Web MIDI API) ---
+  (function () {
+    const sel = document.getElementById('midi-input-select');
+    let midiAccess = null;
+    let currentInput = null;
+
+    if (!navigator.requestMIDIAccess) {
+      sel.innerHTML = '<option value="">MIDI not supported</option>';
+      sel.disabled = true;
+      return;
+    }
+    function populate() {
+      const prev = currentInput ? currentInput.id : '';
+      sel.innerHTML = '<option value="">— none —</option>';
+      if (!midiAccess) return;
+      let has = false;
+      midiAccess.inputs.forEach(function (input) {
+        has = true;
+        const opt = document.createElement('option');
+        opt.value = input.id;
+        opt.textContent = input.name || 'MIDI device';
+        if (input.id === prev) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      if (!has) {
+        const opt = document.createElement('option');
+        opt.value = ''; opt.textContent = 'No devices found';
+        sel.appendChild(opt);
+      }
+    }
+    function attach(id) {
+      if (currentInput) { try { currentInput.onmidimessage = null; } catch (e) {} currentInput = null; }
+      if (!id || !midiAccess) return;
+      const input = midiAccess.inputs.get(id);
+      if (!input) return;
+      currentInput = input;
+      input.onmidimessage = onMessage;
+      showToast('MIDI: ' + (input.name || 'connected'));
+    }
+    const SHARP_LETTERS = ['C','C','D','D','E','F','F','G','G','A','A','B'];
+    const SHARP_ACC     = [ 0,  1,  0,  1,  0,  0,  1,  0,  1,  0,  1,  0];
+    function onMessage(e) {
+      const d = e.data;
+      if (!d || d.length < 2) return;
+      const cmd = d[0] & 0xF0;
+      const midi = d[1];
+      const vel = d[2] || 0;
+      if (cmd === 0x90 && vel > 0) {
+        // Note On — play one note through the current synth voice
+        const pc = midi % 12;
+        const octave = Math.floor(midi / 12) - 1;
+        const note = { letter: SHARP_LETTERS[pc], accidental: SHARP_ACC[pc], octave: octave };
+        // Scale duration slightly with velocity; 1.2s feels natural
+        synth.playNotes([note], 0, 1.2);
+      }
+      // Note-off intentionally ignored; the piano voice decays naturally.
+    }
+    sel.addEventListener('focus', async function () {
+      // Lazy permission request — don't prompt on page load
+      if (!midiAccess) {
+        try {
+          midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+          midiAccess.onstatechange = populate;
+          populate();
+        } catch (err) {
+          sel.innerHTML = '<option value="">Permission denied</option>';
+        }
+      }
+    });
+    sel.addEventListener('change', function () {
+      synth.ensure(); // warm the AudioContext under a user gesture
+      attach(sel.value);
+    });
+  })();
 
   document.getElementById('btn-close-export').addEventListener('click', function () {
     document.getElementById('export-modal').classList.remove('open');
