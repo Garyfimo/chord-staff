@@ -1623,16 +1623,17 @@
     }
     return system.content;
   }
+  const PIANO_STAFF_GAP = 64; // vertical gap between treble bottom line and bass top line (px)
   function staffFrames(system) {
     const frames = [{ staff: 'treble', clef: 'treble', contentKey: 'content', topY: STAFF.topY, bottomY: STAFF.bottomY, labelY: STAFF.labelY }];
     if (system.kind === 'piano') {
-      const bassTop = STAFF.bottomY + 56;
+      const bassTop = STAFF.bottomY + PIANO_STAFF_GAP;
       frames.push({ staff: 'bass', clef: 'bass', contentKey: 'bassContent', topY: bassTop, bottomY: bassTop + 4 * STAFF.spacing, labelY: bassTop - 10 });
     }
     return frames;
   }
   function systemSvgHeight(system) {
-    return system.kind === 'piano' ? (STAFF.bottomY + 56 + 4 * STAFF.spacing + 36) : STAFF.H;
+    return system.kind === 'piano' ? (STAFF.bottomY + PIANO_STAFF_GAP + 4 * STAFF.spacing + 36) : STAFF.H;
   }
 
   function renderSystemStaff(svg, sysIdx, interactive) {
