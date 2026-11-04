@@ -1348,6 +1348,15 @@
     if (evt.kind === 'notes') return (evt.notes || []).map(function (n) { return expandNote(n, clef); });
     return [];
   }
+  // Apply the key signature's accidental to notes whose stored accidental is 0
+  // (used for labels and playback, NOT for drawing accidental glyphs).
+  function applyKeyToNotes(notes, key) {
+    if (!key) return notes;
+    return notes.map(function (n) {
+      const acc = effectiveAccidental(n.letter, n.accidental || 0, key);
+      return Object.assign({}, n, { accidental: acc });
+    });
+  }
   function eventDuration(evt) {
     return (evt && DURATIONS[evt.duration]) ? evt.duration : 'quarter';
   }
@@ -1807,7 +1816,7 @@
               });
             } else if (e.kind === 'notes') {
               const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
-              drawNotesCluster(svg, expanded, cx, noteLabels(expanded), {
+              drawNotesCluster(svg, expanded, cx, noteLabels(applyKeyToNotes(expanded, state.key)), {
                 duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'rest') {
@@ -2477,7 +2486,7 @@
       scheduled.forEach(function (it) {
         const when = t0 + it.startBeat * beat;
         const dur = it.beats * beat;
-        synth.playNotes(eventNotes(it.evt, it.clef), when, dur * 0.92);
+        synth.playNotes(applyKeyToNotes(eventNotes(it.evt, it.clef), state.key), when, dur * 0.92);
         const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
         self.timers.push(setTimeout(function () { setPlayingSlot(it.sysIdx, it.slotIdx, it.evtIdx, it.staff); }, delayMs));
         if (it.startBeat + it.beats > endBeat) endBeat = it.startBeat + it.beats;
@@ -2566,7 +2575,7 @@
             drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'notes') {
             const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
-            drawNotesCluster(g, expanded, cx, noteLabels(expanded), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+            drawNotesCluster(g, expanded, cx, noteLabels(applyKeyToNotes(expanded, state.key)), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'rest') {
             drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
           }
@@ -2698,7 +2707,7 @@
     }
     setMeasureIn(content, slot, events);
     save(); renderAll();
-    if (addedNote) synth.playNotes([expandNote(addedNote, staff)], 0, 0.6);
+    if (addedNote) synth.playNotes(applyKeyToNotes([expandNote(addedNote, frame.clef)], state.key), 0, 0.6);
   }
 
   // --- Circle of Fifths ---
