@@ -3219,7 +3219,12 @@
       if (this.unsubscribe) { try { this.unsubscribe(); } catch (e) {} }
       const self = this;
       this.unsubscribe = fbDb.collection('sessions').doc(code).onSnapshot(function (snap) {
-        if (!snap.exists) return;
+        if (!snap.exists) {
+          if (self.role === 'student') {
+            self.leave('Teacher ended the session');
+          }
+          return;
+        }
         const d = snap.data();
         if (self.role === 'student' && d.state) {
           const incoming = JSON.stringify(d.state);
@@ -3245,16 +3250,25 @@
         }
       }, function (err) { console.warn('snapshot error', err); showToast('Lost sync — ' + err.code); });
     },
-    leave: function () {
+    leave: function (reason) {
+      const wasTeacher = this.role === 'teacher';
+      const code = this.sessionCode;
       if (this.unsubscribe) { try { this.unsubscribe(); } catch (e) {} this.unsubscribe = null; }
       if (this.presenceUnsub) { try { this.presenceUnsub(); } catch (e) {} this.presenceUnsub = null; }
       this._stopPresence(true);
+      // Teacher closes the session for everyone by deleting the Firestore doc;
+      // students' onSnapshot fires with !exists and kicks them back to the gate.
+      if (wasTeacher && code && fbDb) {
+        fbDb.collection('sessions').doc(code).delete().catch(function () {});
+      }
       this.role = 'solo'; this.sessionCode = null; this.uid = null; this.teacherName = null;
       this.lastWrittenJson = null;
       this.studentsOnline = 0;
       try { fbAuth && fbAuth.signOut(); } catch (e) {}
       document.body.setAttribute('data-role', 'solo');
       this._updateBanner();
+      if (reason) showToast(reason);
+      if (this._openGate) this._openGate();
     },
     _startPresence: function () {
       const self = this;
@@ -3347,6 +3361,14 @@
       teacherBtn.disabled = !fbReady;
       studentBtn.disabled = !fbReady;
     }
+    // Let remote.leave() reopen the gate for both explicit Leave and teacher-ended-session.
+    remote._openGate = openGate;
+    // Best-effort cleanup: if the teacher closes the tab, delete the session so students see it end.
+    window.addEventListener('beforeunload', function () {
+      if (remote.role === 'teacher' && remote.sessionCode && fbDb) {
+        try { fbDb.collection('sessions').doc(remote.sessionCode).delete(); } catch (e) {}
+      }
+    });
     if (!fbReady) {
       teacherBtn.disabled = true;
       studentBtn.disabled = true;
