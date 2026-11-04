@@ -2752,6 +2752,7 @@
   const remote = {
     role: 'solo', sessionCode: null, uid: null, teacherName: null,
     unsubscribe: null, applying: false, writeTimer: null, lastWrittenJson: null,
+    presenceTimer: null, presenceUnsub: null, studentsOnline: 0,
     isReady: fbReady,
     onLocalChange: function () {
       if (this.role !== 'teacher' || this.applying || !fbDb || !this.sessionCode) return;
@@ -2811,6 +2812,8 @@
         this.role = 'teacher';
         this.lastWrittenJson = JSON.stringify(serializeStateForRemote());
         this._subscribe(code);
+        this._startPresence();
+        this._watchPresence();
         this._updateBanner();
         return code;
       }
@@ -2833,6 +2836,7 @@
       this.applying = false;
       renderAll();
       this._subscribe(code);
+      this._startPresence();
       this._updateBanner();
     },
     _subscribe: function (code) {
@@ -2867,11 +2871,59 @@
     },
     leave: function () {
       if (this.unsubscribe) { try { this.unsubscribe(); } catch (e) {} this.unsubscribe = null; }
+      if (this.presenceUnsub) { try { this.presenceUnsub(); } catch (e) {} this.presenceUnsub = null; }
+      this._stopPresence(true);
       this.role = 'solo'; this.sessionCode = null; this.uid = null; this.teacherName = null;
       this.lastWrittenJson = null;
+      this.studentsOnline = 0;
       try { fbAuth && fbAuth.signOut(); } catch (e) {}
       document.body.setAttribute('data-role', 'solo');
       this._updateBanner();
+    },
+    _startPresence: function () {
+      const self = this;
+      const code = this.sessionCode, uid = this.uid, role = this.role;
+      if (!code || !uid) return;
+      const ref = fbDb.collection('sessions').doc(code).collection('presence').doc(uid);
+      function ping() {
+        ref.set({
+          role: role,
+          lastSeen: firebase.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true }).catch(function () {});
+      }
+      ping();
+      clearInterval(this.presenceTimer);
+      this.presenceTimer = setInterval(ping, 15000);
+      // Best-effort cleanup on tab close
+      this._beforeUnload = function () { try { ref.delete(); } catch (e) {} };
+      window.addEventListener('beforeunload', this._beforeUnload);
+    },
+    _stopPresence: function (removeDoc) {
+      if (this.presenceTimer) { clearInterval(this.presenceTimer); this.presenceTimer = null; }
+      if (this._beforeUnload) { window.removeEventListener('beforeunload', this._beforeUnload); this._beforeUnload = null; }
+      if (removeDoc && this.sessionCode && this.uid) {
+        fbDb.collection('sessions').doc(this.sessionCode)
+          .collection('presence').doc(this.uid).delete().catch(function () {});
+      }
+    },
+    _watchPresence: function () {
+      const self = this;
+      if (!this.sessionCode) return;
+      this.presenceUnsub = fbDb.collection('sessions').doc(this.sessionCode)
+        .collection('presence').onSnapshot(function (qs) {
+          const nowMs = Date.now();
+          let count = 0;
+          qs.forEach(function (doc) {
+            const d = doc.data();
+            if (d.role !== 'student') return;
+            const ts = d.lastSeen;
+            if (!ts) { count++; return; }
+            const t = typeof ts.toMillis === 'function' ? ts.toMillis() : (ts.seconds ? ts.seconds * 1000 : nowMs);
+            if (nowMs - t < 35000) count++;
+          });
+          self.studentsOnline = count;
+          self._updateBanner();
+        }, function (err) { console.warn('presence watch', err); });
     },
     _updateBanner: function () {
       const banner = document.getElementById('session-banner');
@@ -2890,9 +2942,13 @@
       chip.textContent = this.role === 'teacher' ? 'Teacher' : 'Student';
       chip.className = 'role-chip ' + this.role;
       codeEl.textContent = this.sessionCode || '—';
-      userEl.textContent = this.role === 'teacher'
-        ? ('Signed in as ' + (this.teacherName || 'Teacher'))
-        : ('Watching ' + (this.teacherName || 'Teacher') + "'s session");
+      if (this.role === 'teacher') {
+        const n = this.studentsOnline;
+        const studentsLabel = n === 0 ? 'No students yet' : (n + ' student' + (n === 1 ? '' : 's') + ' online');
+        userEl.innerHTML = '<span style="color:var(--ink-mid)">Signed in as ' + (this.teacherName || 'Teacher') + '</span> · <b>' + studentsLabel + '</b>';
+      } else {
+        userEl.textContent = 'Watching ' + (this.teacherName || 'Teacher') + "'s session";
+      }
       leaveBtn.hidden = false;
       copyBtn.hidden = this.role !== 'teacher';
     },
