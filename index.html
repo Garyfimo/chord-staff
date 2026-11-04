@@ -1354,6 +1354,10 @@
     if (evt.kind === 'notes') return (evt.notes || []).map(function (n) { return expandNote(n, clef); });
     return [];
   }
+  function staffKey(system, staff) {
+    if (staff === 'bass' && system && system.kind === 'piano' && system.bassKey) return system.bassKey;
+    return state.key;
+  }
   // Apply the key signature's accidental to notes whose stored accidental is 0
   // (used for labels and playback, NOT for drawing accidental glyphs).
   function applyKeyToNotes(notes, key) {
@@ -1459,7 +1463,7 @@
             content: migrateContent(s.content),
             kind: kind,
           };
-          if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+          if (kind === "piano") { out.bassContent = migrateContent(s.bassContent); if (s.bassKey && KEYS[s.bassKey]) out.bassKey = s.bassKey; }
           return out;
         });
       } else if (parsed.content && typeof parsed.content === 'object') {
@@ -1512,7 +1516,7 @@
           content: migrateContent(s.content),
           kind: kind,
         };
-        if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+        if (kind === "piano") { out.bassContent = migrateContent(s.bassContent); if (s.bassKey && KEYS[s.bassKey]) out.bassKey = s.bassKey; }
         return out;
       });
     }
@@ -1536,9 +1540,18 @@
   }
   function timeSigWidth() { return 28; }
   const CLEF_WIDTH = 46; // horizontal space reserved after the left bar for the clef glyph
-  function playableLeftEdge() { return STAFF.leftMargin + CLEF_WIDTH + keySignatureWidth(state.key) + timeSigWidth(); }
-  function slotWidth(slots) { return (STAFF.W - playableLeftEdge() - STAFF.rightMargin) / slots; }
-  function slotCenterX(i, slots) { return playableLeftEdge() + slotWidth(slots) * (i + 0.5); }
+  function maxKeySigWidthForSystem(system) {
+    let w = keySignatureWidth(state.key);
+    if (system && system.kind === 'piano') {
+      w = Math.max(w, keySignatureWidth(system.bassKey || state.key));
+    }
+    return w;
+  }
+  function playableLeftEdge(system) {
+    return STAFF.leftMargin + CLEF_WIDTH + maxKeySigWidthForSystem(system) + timeSigWidth();
+  }
+  function slotWidth(slots, system) { return (STAFF.W - playableLeftEdge(system) - STAFF.rightMargin) / slots; }
+  function slotCenterX(i, slots, system) { return playableLeftEdge(system) + slotWidth(slots, system) * (i + 0.5); }
 
   function drawTimeSignature(svg, timeStr, opts) {
     opts = opts || {};
@@ -1733,8 +1746,8 @@
     const slots = system.slots;
     const frames = staffFrames(system);
     const mBeats = measureBeats(parseTime(system.time));
-    const playLeft = playableLeftEdge();
-    const sw = slotWidth(slots);
+    const playLeft = playableLeftEdge(system);
+    const sw = slotWidth(slots, system);
     const rx = STAFF.W - STAFF.rightMargin;
 
     const isPiano = system.kind === 'piano';
@@ -1773,7 +1786,7 @@
       // Clef glyph
       const cfg = CLEFS[f.clef];
       svg.appendChild(el('text', { x: STAFF.leftMargin - 2, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'var(--f-music)', 'font-size': cfg.glyphFontSize, fill: 'var(--staff)' }, cfg.glyph));
-      drawKeySignature(svg, state.key, { startX: STAFF.leftMargin + CLEF_WIDTH, bottomY: f.bottomY, clef: f.clef });
+      drawKeySignature(svg, staffKey(system, f.staff), { startX: STAFF.leftMargin + CLEF_WIDTH, bottomY: f.bottomY, clef: f.clef });
       drawTimeSignature(svg, system.time || '4/4', { topY: f.topY, bottomY: f.bottomY });
 
       if (!isPiano) {
@@ -1822,7 +1835,7 @@
               });
             } else if (e.kind === 'notes') {
               const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
-              drawNotesCluster(svg, expanded, cx, noteLabels(applyKeyToNotes(expanded, state.key)), {
+              drawNotesCluster(svg, expanded, cx, noteLabels(applyKeyToNotes(expanded, staffKey(system, f.staff))), {
                 duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'rest') {
@@ -2124,6 +2137,34 @@
       if (shrunk > 0) showToast(shrunk + ' note' + (shrunk > 1 ? 's' : '') + ' shrunk to fit');
     });
 
+    // Per-piano-line bass key selector
+    if (state.systems[sysIdx].kind === 'piano') {
+      const bassWrap = document.createElement('div');
+      bassWrap.className = 'time-select';
+      bassWrap.innerHTML = '<span>Bass key</span>';
+      const bassSel = document.createElement('select');
+      bassSel.setAttribute('aria-label', 'Bass staff key signature for line ' + (sysIdx + 1));
+      const inheritOpt = document.createElement('option');
+      inheritOpt.value = '__inherit__';
+      inheritOpt.textContent = 'Same as treble';
+      bassSel.appendChild(inheritOpt);
+      CIRCLE_KEYS.forEach(function (k) {
+        const opt = document.createElement('option');
+        opt.value = k; opt.textContent = prettyRoot(k) + ' major';
+        bassSel.appendChild(opt);
+      });
+      bassSel.value = state.systems[sysIdx].bassKey || '__inherit__';
+      bassSel.addEventListener('change', function () {
+        if (player.playing) player.stop();
+        const v = bassSel.value;
+        if (v === '__inherit__') delete state.systems[sysIdx].bassKey;
+        else state.systems[sysIdx].bassKey = v;
+        save(); renderAll();
+      });
+      bassWrap.appendChild(bassSel);
+      head.appendChild(bassWrap);
+    }
+
     const removeBtn = document.createElement('button');
     removeBtn.className = 'btn-tiny remove-system';
     removeBtn.setAttribute('aria-label', 'Remove line ' + (sysIdx + 1));
@@ -2201,7 +2242,7 @@
         const defaultPos = 6;
         const kbClef = staff === 'bass' ? 'bass' : 'treble';
         const kbLetter = letterAtPosition(defaultPos, kbClef);
-        const kbAcc = effectiveAccidental(kbLetter, state.accidental, state.key);
+        const kbAcc = effectiveAccidental(kbLetter, state.accidental, staffKey(sys, staff));
         if (evtIdx == null || !events[evtIdx] || events[evtIdx].kind !== 'notes') {
           const mBeats = measureBeats(parseTime(sys.time));
           const remaining = mBeats - usedBeats(events);
@@ -2498,7 +2539,7 @@
       scheduled.forEach(function (it) {
         const when = t0 + it.startBeat * beat;
         const dur = it.beats * beat;
-        synth.playNotes(applyKeyToNotes(eventNotes(it.evt, it.clef), state.key), when, dur * 0.92);
+        synth.playNotes(applyKeyToNotes(eventNotes(it.evt, it.clef), staffKey(state.systems[it.sysIdx], it.staff)), when, dur * 0.92);
         const delayMs = Math.max(0, (when - ctx.currentTime) * 1000);
         self.timers.push(setTimeout(function () { setPlayingSlot(it.sysIdx, it.slotIdx, it.evtIdx, it.staff); }, delayMs));
         if (it.startBeat + it.beats > endBeat) endBeat = it.startBeat + it.beats;
@@ -2528,8 +2569,8 @@
     const sys = state.systems[sysIdx];
     const frames = staffFrames(sys);
     const mBeats = measureBeats(parseTime(sys.time));
-    const playLeft = playableLeftEdge();
-    const sw = slotWidth(sys.slots);
+    const playLeft = playableLeftEdge(sys);
+    const sw = slotWidth(sys.slots, sys);
     const rx = STAFF.W - STAFF.rightMargin;
 
     const isPianoE = sys.kind === 'piano';
@@ -2555,7 +2596,7 @@
       }
       const cfg = CLEFS[f.clef];
       g.appendChild(el('text', { x: STAFF.leftMargin - 2, y: f.bottomY + cfg.glyphYOffset, 'font-family': 'Noto Music, Bravura, Segoe UI Symbol, serif', 'font-size': cfg.glyphFontSize, fill: colors.staff }, cfg.glyph));
-      drawKeySignature(g, state.key, { startX: STAFF.leftMargin + CLEF_WIDTH, bottomY: f.bottomY, clef: f.clef, colorInk: colors.staff });
+      drawKeySignature(g, staffKey(sys, f.staff), { startX: STAFF.leftMargin + CLEF_WIDTH, bottomY: f.bottomY, clef: f.clef, colorInk: colors.staff });
       drawTimeSignature(g, sys.time || '4/4', { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
       if (!isPianoE) {
         for (let i = 1; i < sys.slots; i++) {
@@ -2587,7 +2628,7 @@
             drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'notes') {
             const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
-            drawNotesCluster(g, expanded, cx, noteLabels(applyKeyToNotes(expanded, state.key)), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+            drawNotesCluster(g, expanded, cx, noteLabels(applyKeyToNotes(expanded, staffKey(sys, f.staff))), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'rest') {
             drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
           }
@@ -2682,7 +2723,7 @@
     let addedNote = null;
 
     const placedLetter = letterAtPosition(position, frame.clef);
-    const placedAcc = effectiveAccidental(placedLetter, state.accidental, state.key);
+    const placedAcc = effectiveAccidental(placedLetter, state.accidental, staffKey(sys, staff));
     if (evtIdx == null) {
       const remaining = mBeats - usedBeats(events);
       if (remaining <= 0) { showToast('Measure is full'); return; }
@@ -2719,7 +2760,7 @@
     }
     setMeasureIn(content, slot, events);
     save(); renderAll();
-    if (addedNote) synth.playNotes(applyKeyToNotes([expandNote(addedNote, frame.clef)], state.key), 0, 0.6);
+    if (addedNote) synth.playNotes(applyKeyToNotes([expandNote(addedNote, frame.clef)], staffKey(sys, staff)), 0, 0.6);
   }
 
   // --- Circle of Fifths ---
@@ -2957,7 +2998,7 @@
           content: migrateContent(s.content),
           kind: kind,
         };
-        if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+        if (kind === "piano") { out.bassContent = migrateContent(s.bassContent); if (s.bassKey && KEYS[s.bassKey]) out.bassKey = s.bassKey; }
         return out;
       });
     } else if (parsed.content && typeof parsed.content === 'object') {
