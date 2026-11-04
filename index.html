@@ -3,6 +3,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Inter:wght@400;500;600&family=Noto+Music&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.14.1/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.14.1/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.14.1/firebase-firestore-compat.min.js"></script>
 <style>
   /* Design — editorial, music-publication aesthetic.
      Manuscript paper surface, inked serif chord labels, deep claret accent.
@@ -807,7 +810,138 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { transition: none !important; animation: none !important; }
   }
+
+  /* --- Session gate + banner --- */
+  .gate {
+    position: fixed; inset: 0; background: color-mix(in oklab, var(--bg) 92%, black);
+    display: flex; align-items: center; justify-content: center; z-index: 50;
+    padding: 24px; overflow-y: auto;
+  }
+  .gate-card {
+    background: var(--paper); border: 1px solid var(--paper-edge);
+    border-radius: 10px; max-width: 760px; width: 100%;
+    padding: 28px 32px; box-shadow: 0 30px 80px rgba(0,0,0,0.22);
+  }
+  .gate h2 {
+    margin: 0 0 6px; font-family: var(--f-display); font-weight: 600;
+    font-style: italic; font-size: 28px; color: var(--ink);
+  }
+  .gate .gate-sub { color: var(--ink-mid); margin: 0 0 18px; font-size: 14px; }
+  .gate-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .gate-cols { grid-template-columns: 1fr; } }
+  .gate-col {
+    border: 1px solid var(--rule); border-radius: 8px; padding: 18px 16px;
+    background: var(--surface-raise);
+  }
+  .gate-col h3 {
+    margin: 0 0 10px; font-family: var(--f-display); font-weight: 600; font-size: 17px;
+  }
+  .gate-col p { margin: 0 0 12px; color: var(--ink-mid); font-size: 13px; line-height: 1.5; }
+  .gate-btn {
+    width: 100%; border: 1px solid var(--rule); background: var(--paper);
+    padding: 10px 14px; font-family: var(--f-body); font-size: 14px; font-weight: 500;
+    color: var(--ink); border-radius: 6px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .gate-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-wash); }
+  .gate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .gate-btn.primary { background: var(--accent); color: var(--paper); border-color: var(--accent); }
+  .gate-btn.primary:hover { background: var(--accent-ink); color: var(--paper); }
+  .gate-input {
+    width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--rule); background: var(--paper); font-family: var(--f-body);
+    font-size: 16px; color: var(--ink); letter-spacing: 3px; text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .gate-input:focus { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .gate-foot { margin-top: 16px; text-align: center; font-size: 13px; color: var(--ink-mid); }
+  .gate-foot a, .gate-foot button.link {
+    background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer;
+    font-family: inherit; font-size: inherit; text-decoration: underline;
+  }
+  .gate-error { color: var(--accent); font-size: 13px; margin: 0 0 10px; min-height: 18px; }
+
+  .session-banner {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 10px 14px; margin: 0 0 14px;
+    background: var(--surface-raise); border: 1px solid var(--rule); border-radius: 8px;
+    font-family: var(--f-body); font-size: 13px; color: var(--ink);
+  }
+  .session-banner .role-chip {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-weight: 600; letter-spacing: 0.5px; font-size: 11px; text-transform: uppercase;
+  }
+  .session-banner .role-chip.teacher { background: var(--accent); color: var(--paper); }
+  .session-banner .role-chip.student { background: color-mix(in oklab, var(--focus) 85%, white); color: white; }
+  .session-banner .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 700; letter-spacing: 3px; font-size: 15px; color: var(--accent);
+  }
+  .session-banner .copy-btn, .session-banner .leave-btn {
+    border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+    padding: 4px 10px; border-radius: 5px; cursor: pointer; font-size: 12px;
+  }
+  .session-banner .copy-btn:hover, .session-banner .leave-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .session-banner .spacer { flex: 1; }
+  .session-banner .peers { color: var(--ink-mid); font-size: 12px; }
+
+  /* Student restrictions: hide editing toolbar + disable staff clicks */
+  body[data-role="student"] .toolbar .btn:not(#btn-download):not(#btn-copy),
+  body[data-role="student"] .toolbar .stepper,
+  body[data-role="student"] .toolbar-spacer,
+  body[data-role="student"] .mode-bar,
+  body[data-role="student"] .mode-hint,
+  body[data-role="student"] .add-system-row,
+  body[data-role="student"] .system-head .stepper,
+  body[data-role="student"] .system-head .time-select,
+  body[data-role="student"] .system-head .remove-system,
+  body[data-role="student"] .fifths-panel,
+  body[data-role="student"] #template-name { pointer-events: none; }
+  body[data-role="student"] .toolbar .btn:not(#btn-download):not(#btn-copy),
+  body[data-role="student"] .toolbar .stepper,
+  body[data-role="student"] .toolbar-spacer,
+  body[data-role="student"] .mode-bar,
+  body[data-role="student"] .mode-hint,
+  body[data-role="student"] .add-system-row,
+  body[data-role="student"] .system-head .stepper,
+  body[data-role="student"] .system-head .time-select,
+  body[data-role="student"] .system-head .remove-system { display: none !important; }
+  body[data-role="student"] .slot-target { pointer-events: none !important; cursor: default; }
+  body[data-role="student"] #template-name { opacity: 0.85; }
 </style>
+
+<div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
+  <div class="gate-card">
+    <h2 id="gate-title">Chord Staff</h2>
+    <p class="gate-sub">Join a session or work on your own.</p>
+    <p class="gate-error" id="gate-error">&nbsp;</p>
+    <div class="gate-cols">
+      <div class="gate-col">
+        <h3>Teacher</h3>
+        <p>Sign in with Google to start a session. You&rsquo;ll get a 6-character code to share with your class.</p>
+        <button class="gate-btn primary" id="gate-teacher-btn">Sign in with Google</button>
+      </div>
+      <div class="gate-col">
+        <h3>Student</h3>
+        <p>Enter the session code your teacher gave you.</p>
+        <input class="gate-input" id="gate-code-input" maxlength="6" placeholder="ABC123" autocomplete="off" />
+        <button class="gate-btn" id="gate-student-btn">Join session</button>
+      </div>
+    </div>
+    <div class="gate-foot">
+      or <button type="button" class="link" id="gate-solo-btn">continue solo</button> &mdash; no sign-in, local only.
+    </div>
+  </div>
+</div>
+
+<div class="session-banner" id="session-banner" hidden>
+  <span class="role-chip" id="session-role">Solo</span>
+  <span>Session <span class="code" id="session-code">&mdash;</span></span>
+  <button class="copy-btn" id="session-copy-btn" type="button">Copy code</button>
+  <span class="spacer"></span>
+  <span class="peers" id="session-user">&nbsp;</span>
+  <button class="leave-btn" id="session-leave-btn" type="button">Leave</button>
+</div>
 
 <header class="masthead">
   <div>
@@ -950,6 +1084,26 @@
 <script>
 (function () {
   'use strict';
+
+  // --- Firebase (realtime collaboration) ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyB7LgRNYqeP58x_oGtvfaZUmK_oQKL4m9w",
+    authDomain: "chord-staff.firebaseapp.com",
+    projectId: "chord-staff",
+    storageBucket: "chord-staff.firebasestorage.app",
+    messagingSenderId: "216429013253",
+    appId: "1:216429013253:web:de37990b90dad829676f6c",
+    measurementId: "G-K9VTTDYBDW"
+  };
+  let fbReady = false, fbDb = null, fbAuth = null;
+  try {
+    if (window.firebase && window.firebase.initializeApp) {
+      window.firebase.initializeApp(firebaseConfig);
+      fbAuth = window.firebase.auth();
+      fbDb = window.firebase.firestore();
+      fbReady = true;
+    }
+  } catch (e) { fbReady = false; }
 
   // --- Music theory ---
   const LETTERS = ['C','D','E','F','G','A','B'];
@@ -1258,6 +1412,39 @@
         key: state.key, systems: state.systems,
       }));
     } catch (e) { /* ignore */ }
+    if (typeof remote !== 'undefined' && remote && remote.onLocalChange) {
+      remote.onLocalChange();
+    }
+  }
+
+  function serializeStateForRemote() {
+    return {
+      name: state.name, tempo: state.tempo,
+      mode: state.mode, accidental: state.accidental, duration: state.duration,
+      key: state.key, systems: state.systems,
+    };
+  }
+  function applyRemoteState(parsed) {
+    if (!parsed || typeof parsed !== 'object') return;
+    if (typeof parsed.name === 'string') state.name = parsed.name;
+    if (typeof parsed.tempo === 'number') state.tempo = parsed.tempo;
+    if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
+    if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
+    if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+    if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
+    if (Array.isArray(parsed.systems) && parsed.systems.length) {
+      state.systems = parsed.systems.map(function (s) {
+        const kind = s.kind === 'piano' ? 'piano' : 'treble';
+        const out = {
+          slots: typeof s.slots === 'number' ? s.slots : 8,
+          time: TIME_SIGS.indexOf(s.time) >= 0 ? s.time : '4/4',
+          content: migrateContent(s.content),
+          kind: kind,
+        };
+        if (kind === 'piano') out.bassContent = migrateContent(s.bassContent);
+        return out;
+      });
+    }
   }
 
   // --- Staff geometry ---
@@ -2061,6 +2248,7 @@
       const totalMs = Math.max(0, endBeat * beat * 1000 + 140);
       this.timers.push(setTimeout(function () { self.finish(); }, totalMs));
       updatePlayButton();
+      if (typeof remote !== 'undefined' && remote && remote.onLocalPlay) remote.onLocalPlay();
     },
     finish: function () {
       this.timers.forEach(clearTimeout);
@@ -2068,6 +2256,7 @@
       this.playing = false;
       setPlayingSlot(null);
       updatePlayButton();
+      if (typeof remote !== 'undefined' && remote && remote.onLocalStop) remote.onLocalStop();
     },
     stop: function () { synth.stopAll(); this.finish(); },
   };
@@ -2553,6 +2742,214 @@
   document.getElementById('export-modal').addEventListener('click', function (e) {
     if (e.target === this) this.classList.remove('open');
   });
+
+  // --- Realtime sessions (teacher/student roles via Firebase) ---
+  const remote = {
+    role: 'solo', sessionCode: null, uid: null, teacherName: null,
+    unsubscribe: null, applying: false, writeTimer: null, lastWrittenJson: null,
+    isReady: fbReady,
+    onLocalChange: function () {
+      if (this.role !== 'teacher' || this.applying || !fbDb || !this.sessionCode) return;
+      clearTimeout(this.writeTimer);
+      const self = this;
+      this.writeTimer = setTimeout(function () { self._pushState(); }, 300);
+    },
+    _pushState: function () {
+      if (!fbDb || !this.sessionCode) return;
+      const data = serializeStateForRemote();
+      const json = JSON.stringify(data);
+      if (json === this.lastWrittenJson) return;
+      this.lastWrittenJson = json;
+      fbDb.collection('sessions').doc(this.sessionCode).update({ state: data })
+        .catch(function (e) { console.warn('state push failed', e); });
+    },
+    onLocalPlay: function () {
+      if (this.role !== 'teacher' || this.applying || !fbDb || !this.sessionCode) return;
+      fbDb.collection('sessions').doc(this.sessionCode).update({
+        'playback.isPlaying': true,
+        'playback.startedAt': firebase.firestore.FieldValue.serverTimestamp(),
+        'playback.nonce': Math.random().toString(36).slice(2, 10),
+      }).catch(function () {});
+    },
+    onLocalStop: function () {
+      if (this.role !== 'teacher' || this.applying || !fbDb || !this.sessionCode) return;
+      fbDb.collection('sessions').doc(this.sessionCode).update({
+        'playback.isPlaying': false,
+      }).catch(function () {});
+    },
+    generateCode: function () {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let c = '';
+      for (let i = 0; i < 6; i++) c += chars[Math.floor(Math.random() * chars.length)];
+      return c;
+    },
+    teacherCreate: async function () {
+      if (!fbReady) throw new Error('Realtime unavailable');
+      const provider = new firebase.auth.GoogleAuthProvider();
+      const cred = await fbAuth.signInWithPopup(provider);
+      this.uid = cred.user.uid;
+      this.teacherName = cred.user.displayName || 'Teacher';
+      // Try a few codes until one is free
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const code = this.generateCode();
+        const ref = fbDb.collection('sessions').doc(code);
+        const snap = await ref.get();
+        if (snap.exists) continue;
+        await ref.set({
+          teacherUid: this.uid,
+          teacherName: this.teacherName,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          state: serializeStateForRemote(),
+          playback: { isPlaying: false },
+        });
+        this.sessionCode = code;
+        this.role = 'teacher';
+        this.lastWrittenJson = JSON.stringify(serializeStateForRemote());
+        this._subscribe(code);
+        this._updateBanner();
+        return code;
+      }
+      throw new Error('Could not generate a free session code');
+    },
+    studentJoin: async function (code) {
+      if (!fbReady) throw new Error('Realtime unavailable');
+      code = (code || '').toUpperCase().trim();
+      if (!/^[A-Z0-9]{6}$/.test(code)) throw new Error('Session code should be 6 letters/digits');
+      const cred = await fbAuth.signInAnonymously();
+      this.uid = cred.user.uid;
+      const snap = await fbDb.collection('sessions').doc(code).get();
+      if (!snap.exists) throw new Error('No session with that code');
+      const data = snap.data();
+      this.teacherName = data.teacherName || 'Teacher';
+      this.sessionCode = code;
+      this.role = 'student';
+      this.applying = true;
+      if (data.state) applyRemoteState(data.state);
+      this.applying = false;
+      renderAll();
+      this._subscribe(code);
+      this._updateBanner();
+    },
+    _subscribe: function (code) {
+      if (this.unsubscribe) { try { this.unsubscribe(); } catch (e) {} }
+      const self = this;
+      this.unsubscribe = fbDb.collection('sessions').doc(code).onSnapshot(function (snap) {
+        if (!snap.exists) return;
+        const d = snap.data();
+        if (self.role === 'student' && d.state) {
+          const incoming = JSON.stringify(d.state);
+          if (incoming !== self.lastWrittenJson) {
+            self.applying = true;
+            applyRemoteState(d.state);
+            renderAll();
+            self.lastWrittenJson = incoming;
+            self.applying = false;
+          }
+        }
+        if (self.role === 'student' && d.playback) {
+          const want = !!d.playback.isPlaying;
+          if (want && !player.playing) {
+            self.applying = true;
+            player.start();
+            self.applying = false;
+          } else if (!want && player.playing) {
+            self.applying = true;
+            player.stop();
+            self.applying = false;
+          }
+        }
+      }, function (err) { console.warn('snapshot error', err); showToast('Lost sync — ' + err.code); });
+    },
+    leave: function () {
+      if (this.unsubscribe) { try { this.unsubscribe(); } catch (e) {} this.unsubscribe = null; }
+      this.role = 'solo'; this.sessionCode = null; this.uid = null; this.teacherName = null;
+      this.lastWrittenJson = null;
+      try { fbAuth && fbAuth.signOut(); } catch (e) {}
+      document.body.setAttribute('data-role', 'solo');
+      this._updateBanner();
+    },
+    _updateBanner: function () {
+      const banner = document.getElementById('session-banner');
+      const chip = document.getElementById('session-role');
+      const codeEl = document.getElementById('session-code');
+      const userEl = document.getElementById('session-user');
+      const leaveBtn = document.getElementById('session-leave-btn');
+      const copyBtn = document.getElementById('session-copy-btn');
+      if (this.role === 'solo') {
+        banner.hidden = true;
+        document.body.setAttribute('data-role', 'solo');
+        return;
+      }
+      banner.hidden = false;
+      document.body.setAttribute('data-role', this.role);
+      chip.textContent = this.role === 'teacher' ? 'Teacher' : 'Student';
+      chip.className = 'role-chip ' + this.role;
+      codeEl.textContent = this.sessionCode || '—';
+      userEl.textContent = this.role === 'teacher'
+        ? ('Signed in as ' + (this.teacherName || 'Teacher'))
+        : ('Watching ' + (this.teacherName || 'Teacher') + "'s session");
+      leaveBtn.hidden = false;
+      copyBtn.hidden = this.role !== 'teacher';
+    },
+  };
+
+  // --- Gate modal wiring ---
+  (function () {
+    const gate = document.getElementById('gate');
+    const errEl = document.getElementById('gate-error');
+    const teacherBtn = document.getElementById('gate-teacher-btn');
+    const studentBtn = document.getElementById('gate-student-btn');
+    const soloBtn = document.getElementById('gate-solo-btn');
+    const codeInput = document.getElementById('gate-code-input');
+    function setErr(msg) { errEl.textContent = msg || ' '; }
+    function closeGate() { gate.style.display = 'none'; }
+    if (!fbReady) {
+      teacherBtn.disabled = true;
+      studentBtn.disabled = true;
+      setErr('Realtime not available — continue solo.');
+    }
+    teacherBtn.addEventListener('click', async function () {
+      setErr('');
+      teacherBtn.disabled = true;
+      try {
+        await remote.teacherCreate();
+        closeGate();
+        showToast('Session ' + remote.sessionCode + ' ready');
+      } catch (e) {
+        setErr(e && e.message ? e.message : 'Sign-in failed');
+      } finally { teacherBtn.disabled = false; }
+    });
+    studentBtn.addEventListener('click', async function () {
+      setErr('');
+      studentBtn.disabled = true;
+      try {
+        await remote.studentJoin(codeInput.value);
+        closeGate();
+        showToast('Joined session ' + remote.sessionCode);
+      } catch (e) {
+        setErr(e && e.message ? e.message : 'Could not join');
+      } finally { studentBtn.disabled = false; }
+    });
+    soloBtn.addEventListener('click', function () {
+      remote.role = 'solo';
+      remote._updateBanner();
+      closeGate();
+    });
+    codeInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') studentBtn.click();
+    });
+    document.getElementById('session-copy-btn').addEventListener('click', function () {
+      if (!remote.sessionCode) return;
+      try {
+        navigator.clipboard.writeText(remote.sessionCode);
+        showToast('Code copied');
+      } catch (e) {}
+    });
+    document.getElementById('session-leave-btn').addEventListener('click', function () {
+      remote.leave();
+      showToast('Left session');
+    });
+  })();
 
   renderAll();
 })();
