@@ -932,23 +932,31 @@
 <div class="gate" id="gate" role="dialog" aria-modal="true" aria-labelledby="gate-title">
   <div class="gate-card">
     <h2 id="gate-title">Chord Staff</h2>
-    <p class="gate-sub">Join a session or work on your own.</p>
+    <p class="gate-sub" id="gate-sub">Start a session or work on your own.</p>
     <p class="gate-error" id="gate-error">&nbsp;</p>
-    <div class="gate-cols">
+
+    <div class="gate-cols" id="gate-cols-default">
       <div class="gate-col">
         <h3>Teacher</h3>
-        <p>Sign in with Google to start a session. You&rsquo;ll get a 6-character code to share with your class.</p>
+        <p>Sign in with Google to start a session. You&rsquo;ll get a shareable link for your class.</p>
         <button class="gate-btn primary" id="gate-teacher-btn">Sign in with Google</button>
       </div>
       <div class="gate-col">
-        <h3>Student</h3>
-        <p>Enter the session code your teacher gave you.</p>
-        <input class="gate-input" id="gate-code-input" maxlength="6" placeholder="ABC123" autocomplete="off" />
-        <button class="gate-btn" id="gate-student-btn">Join session</button>
+        <h3>Solo</h3>
+        <p>Work on your own, no sign-in. Everything stays local to this browser.</p>
+        <button class="gate-btn" id="gate-solo-btn">Continue solo</button>
       </div>
     </div>
-    <div class="gate-foot">
-      or <button type="button" class="link" id="gate-solo-btn">continue solo</button> &mdash; no sign-in, local only.
+
+    <div class="gate-cols" id="gate-cols-invite" hidden style="grid-template-columns: 1fr;">
+      <div class="gate-col">
+        <h3>Join session <span class="code" id="gate-invite-code" style="color:var(--accent); letter-spacing:3px; font-family:ui-monospace,Menlo,monospace;">&mdash;</span></h3>
+        <p>You were invited to a teacher&rsquo;s session. Join to follow along.</p>
+        <button class="gate-btn primary" id="gate-student-btn">Join as student</button>
+        <p style="margin-top:12px; text-align:center; font-size:12px;">
+          or <button type="button" class="link" id="gate-solo-btn-2">continue solo</button>
+        </p>
+      </div>
     </div>
   </div>
 </div>
@@ -956,7 +964,7 @@
 <div class="session-banner" id="session-banner" hidden>
   <span class="role-chip" id="session-role">Solo</span>
   <span>Session <span class="code" id="session-code">&mdash;</span></span>
-  <button class="copy-btn" id="session-copy-btn" type="button">Copy code</button>
+  <button class="copy-btn" id="session-copy-btn" type="button">Copy link</button>
   <span class="spacer"></span>
   <span class="peers" id="session-user">&nbsp;</span>
   <button class="leave-btn" id="session-leave-btn" type="button">Leave</button>
@@ -987,6 +995,7 @@
     <button type="button" data-dur="half"    aria-pressed="false" aria-label="Half note">&#x1D15E;</button>
     <button type="button" data-dur="quarter" aria-pressed="true"  aria-label="Quarter note">&#x1D15F;</button>
     <button type="button" data-dur="eighth"  aria-pressed="false" aria-label="Eighth note">&#x1D160;</button>
+    <button type="button" data-dot="1" aria-pressed="false" aria-label="Dotted (adds half the value)" title="Dotted note (×1.5)" style="font-weight:700;">·</button>
   </div>
   <div class="modifier-group" id="accidentals-wrap" hidden aria-label="Accidental">
     <span class="label">Accidental</span>
@@ -1186,6 +1195,26 @@
     }
     return 'eighth';
   }
+  // Dotted-aware beat count for an event (dot = ×1.5).
+  function durationBeats(durId, dotted) {
+    const b = (DURATIONS[durId] || DURATIONS.quarter).beats;
+    return dotted ? b * 1.5 : b;
+  }
+  function eventBeats(evt) {
+    return durationBeats(eventDuration(evt), !!(evt && evt.dotted));
+  }
+  // Prefer keeping the requested duration (drop the dot before shrinking),
+  // then fall back to the next smaller duration — dotted first if it fits.
+  function fitEventToMeasure(durId, dotted, beats) {
+    if (dotted && durationBeats(durId, true) <= beats + 1e-9) return { duration: durId, dotted: true };
+    if (durationBeats(durId, false) <= beats + 1e-9) return { duration: durId, dotted: false };
+    for (let i = 0; i < DURATION_ORDER.length; i++) {
+      const d = DURATION_ORDER[i];
+      if (dotted && durationBeats(d, true) <= beats + 1e-9) return { duration: d, dotted: true };
+      if (durationBeats(d, false) <= beats + 1e-9) return { duration: d, dotted: false };
+    }
+    return { duration: 'eighth', dotted: false };
+  }
   function fitSystemDurations(sys) {
     const mBeats = measureBeats(parseTime(sys.time));
     let changed = 0;
@@ -1203,10 +1232,15 @@
           const remaining = mBeats - acc;
           if (remaining <= 0) { changed++; continue; }
           const curDur = eventDuration(e);
-          const fitted = fitDurationToMeasure(curDur, remaining);
-          if (fitted !== curDur) { e.duration = fitted; changed++; }
+          const curDot = !!e.dotted;
+          const fitted = fitEventToMeasure(curDur, curDot, remaining);
+          if (fitted.duration !== curDur) { e.duration = fitted.duration; changed++; }
+          if (fitted.dotted !== curDot) {
+            if (fitted.dotted) e.dotted = true; else delete e.dotted;
+            changed++;
+          }
           kept.push(e);
-          acc += DURATIONS[eventDuration(e)].beats;
+          acc += eventBeats(e);
         }
         setMeasureIn(contentMap, k, kept);
       });
@@ -1378,7 +1412,7 @@
   }
   function usedBeats(evts) {
     let total = 0;
-    for (let i = 0; i < evts.length; i++) total += DURATIONS[eventDuration(evts[i])].beats;
+    for (let i = 0; i < evts.length; i++) total += eventBeats(evts[i]);
     return total;
   }
   function setMeasure(sys, slot, events, staff) {
@@ -1394,7 +1428,7 @@
     const evts = measureEvents(cell);
     let acc = 0;
     return evts.map(function (e) {
-      const b = DURATIONS[eventDuration(e)].beats;
+      const b = eventBeats(e);
       const item = { evt: e, startBeat: acc, beats: b };
       acc += b;
       return item;
@@ -1436,6 +1470,7 @@
     mode: 'chord',
     accidental: 0,
     duration: 'quarter',
+    dotted: false,
     key: 'C',
     systems: JSON.parse(JSON.stringify(DEFAULT_SYSTEMS)).map(function (s) {
       s.content = migrateContent(s.content);
@@ -1453,6 +1488,7 @@
       if (parsed.mode === 'chord' || parsed.mode === 'notes' || parsed.mode === 'rests') state.mode = parsed.mode;
       if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
       if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+      if (typeof parsed.dotted === 'boolean') state.dotted = parsed.dotted;
       if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
       if (Array.isArray(parsed.systems) && parsed.systems.length) {
         state.systems = parsed.systems.map(function (s) {
@@ -1483,7 +1519,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         name: state.name, tempo: state.tempo,
-        mode: state.mode, accidental: state.accidental, duration: state.duration,
+        mode: state.mode, accidental: state.accidental, duration: state.duration, dotted: state.dotted,
         key: state.key, systems: state.systems,
       }));
     } catch (e) { /* ignore */ }
@@ -1495,7 +1531,7 @@
   function serializeStateForRemote() {
     return {
       name: state.name, tempo: state.tempo,
-      mode: state.mode, accidental: state.accidental, duration: state.duration,
+      mode: state.mode, accidental: state.accidental, duration: state.duration, dotted: state.dotted,
       key: state.key, systems: state.systems,
     };
   }
@@ -1506,6 +1542,7 @@
     if (parsed.mode === 'chord' || parsed.mode === 'notes') state.mode = parsed.mode;
     if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
     if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+    if (typeof parsed.dotted === 'boolean') state.dotted = parsed.dotted;
     if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
     if (Array.isArray(parsed.systems) && parsed.systems.length) {
       state.systems = parsed.systems.map(function (s) {
@@ -1529,7 +1566,7 @@
     rightMargin: 22,
     topY: 72,
     spacing: 13,
-    labelY: 40,
+    labelY: 22,
   };
   STAFF.bottomY = STAFF.topY + 4 * STAFF.spacing;
   function noteY(position) { return STAFF.bottomY - (position - 2) * STAFF.spacing / 2; }
@@ -1609,20 +1646,26 @@
     const duration = DURATIONS[durationId];
     function ny(p) { return bottomY - (p - 2) * spacing / 2; }
 
+    // Scan notes first so the label can be pushed clear of the highest notehead.
+    let minP = Infinity, maxP = -Infinity;
+    if (notes && notes.length > 0) {
+      for (let i = 0; i < notes.length; i++) {
+        if (notes[i].position < minP) minP = notes[i].position;
+        if (notes[i].position > maxP) maxP = notes[i].position;
+      }
+    }
     if (labelText) {
+      const notesTopY = (notes && notes.length > 0) ? (ny(maxP) - noteRy) : Infinity;
+      // Keep the label's baseline above the top of the highest notehead,
+      // with a small gap so an augmentation dot above a line-sitting note still fits.
+      const adjustedLabelY = Math.min(labelY, notesTopY - 10);
       svg.appendChild(el('text', {
-        x: cx, y: labelY, 'text-anchor': 'middle',
+        x: cx, y: adjustedLabelY, 'text-anchor': 'middle',
         'font-family': 'var(--f-display)', 'font-size': labelSize,
         'font-style': 'italic', 'font-weight': 500, fill: colorAccent,
       }, labelText));
     }
     if (!notes || notes.length === 0) return;
-
-    let minP = Infinity, maxP = -Infinity;
-    for (let i = 0; i < notes.length; i++) {
-      if (notes[i].position < minP) minP = notes[i].position;
-      if (notes[i].position > maxP) maxP = notes[i].position;
-    }
     for (let p = 0; p >= minP; p -= 2) {
       svg.appendChild(el('line', { x1: cx - ledgerHalf, y1: ny(p), x2: cx + ledgerHalf, y2: ny(p), stroke: colorInk, 'stroke-width': 1.2, 'stroke-linecap': 'round' }));
     }
@@ -1683,6 +1726,18 @@
         }
       }
     }
+    // Augmentation dot: one per note, placed to the right of the head.
+    // Convention: if the note sits on a line, the dot floats up into the space above.
+    if (opts.dotted) {
+      const dotR = Math.max(1.6, noteRy * 0.42);
+      const maxXoRight = Math.max.apply(null, Object.values(xo).concat([0]));
+      for (let i = 0; i < notes.length; i++) {
+        const n = notes[i];
+        const dy = (n.position % 2 === 0) ? -(spacing / 2) : 0;
+        const dx = cx + noteRx + maxXoRight + dotR + 3;
+        svg.appendChild(el('circle', { cx: dx, cy: ny(n.position) + dy, r: dotR, fill: colorInk }));
+      }
+    }
   }
 
   const REST_GLYPHS = { whole: '𝄻', half: '𝄼', quarter: '𝄽', eighth: '𝄾' };
@@ -1701,6 +1756,10 @@
       'font-size': size,
       fill: colorInk,
     }, glyph));
+    if (opts.dotted) {
+      const dotR = Math.max(1.8, size * 0.07);
+      svg.appendChild(el('circle', { cx: cx + size * 0.35, cy: midY - size * 0.08, r: dotR, fill: colorInk }));
+    }
   }
   function drawKeySignature(svg, key, opts) {
     opts = opts || {};
@@ -1725,12 +1784,12 @@
     }
     return system.content;
   }
-  const PIANO_STAFF_GAP = 72; // vertical gap between treble bottom line and bass top line (px)
+  const PIANO_STAFF_GAP = 97; // vertical gap between treble bottom line and bass top line (px)
   function staffFrames(system) {
     const frames = [{ staff: 'treble', clef: 'treble', contentKey: 'content', topY: STAFF.topY, bottomY: STAFF.bottomY, labelY: STAFF.labelY }];
     if (system.kind === 'piano') {
       const bassTop = STAFF.bottomY + PIANO_STAFF_GAP;
-      frames.push({ staff: 'bass', clef: 'bass', contentKey: 'bassContent', topY: bassTop, bottomY: bassTop + 4 * STAFF.spacing, labelY: bassTop - 10 });
+      frames.push({ staff: 'bass', clef: 'bass', contentKey: 'bassContent', topY: bassTop, bottomY: bassTop + 4 * STAFF.spacing, labelY: bassTop - 26 });
     }
     return frames;
   }
@@ -1831,15 +1890,15 @@
             const e = it.evt;
             if (e.kind === 'chord') {
               drawNotesCluster(svg, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), {
-                duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
+                duration: eventDuration(e), dotted: !!e.dotted, labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'notes') {
               const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
               drawNotesCluster(svg, expanded, cx, noteLabels(applyKeyToNotes(expanded, staffKey(system, f.staff))), {
-                duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
+                duration: eventDuration(e), dotted: !!e.dotted, labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY,
               });
             } else if (e.kind === 'rest') {
-              drawRest(svg, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY });
+              drawRest(svg, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, dotted: !!e.dotted });
             }
           });
         }
@@ -2247,8 +2306,10 @@
           const mBeats = measureBeats(parseTime(sys.time));
           const remaining = mBeats - usedBeats(events);
           if (remaining <= 0) { showToast('Measure is full'); return; }
-          const dur = fitDurationToMeasure(state.duration, remaining);
-          events.push({ kind: 'notes', notes: [{ position: defaultPos, accidental: kbAcc }], duration: dur });
+          const fitted = fitEventToMeasure(state.duration, state.dotted, remaining);
+          const noteEvt = { kind: 'notes', notes: [{ position: defaultPos, accidental: kbAcc }], duration: fitted.duration };
+          if (fitted.dotted) noteEvt.dotted = true;
+          events.push(noteEvt);
         } else {
           const evt = Object.assign({}, events[evtIdx]);
           const notes = (evt.notes || []).slice();
@@ -2295,6 +2356,9 @@
     document.querySelectorAll('.modifier-group [data-dur]').forEach(function (b) {
       b.setAttribute('aria-pressed', b.getAttribute('data-dur') === state.duration ? 'true' : 'false');
     });
+    document.querySelectorAll('.modifier-group [data-dot]').forEach(function (b) {
+      b.setAttribute('aria-pressed', state.dotted ? 'true' : 'false');
+    });
     renderFifths();
   }
 
@@ -2304,7 +2368,7 @@
   const previewName = document.getElementById('preview-name');
   const previewSvg = document.getElementById('preview-svg');
   const btnRemove = document.getElementById('btn-remove-chord');
-  let picker = { sysIdx: 0, slot: null, evtIdx: null, root: 'C', quality: '', duration: 'quarter', isNew: true };
+  let picker = { sysIdx: 0, slot: null, evtIdx: null, root: 'C', quality: '', duration: 'quarter', dotted: false, isNew: true };
 
   function handleChordClick(sysIdx, slot, evtIdx, staff) {
     staff = staff || 'treble';
@@ -2316,14 +2380,14 @@
       const mBeats = measureBeats(parseTime(sys.time));
       const remaining = mBeats - usedBeats(events);
       if (remaining <= 0) { showToast('Measure is full'); return; }
-      const dur = fitDurationToMeasure(state.duration, remaining);
-      openPicker(sysIdx, slot, null, { root: 'C', quality: '', duration: dur }, staff);
+      const fitted = fitEventToMeasure(state.duration, state.dotted, remaining);
+      openPicker(sysIdx, slot, null, { root: 'C', quality: '', duration: fitted.duration, dotted: fitted.dotted }, staff);
     } else {
       const evt = events[evtIdx];
       if (!evt) return;
       openPicker(sysIdx, slot, evtIdx, evt.kind === 'chord'
-        ? { root: evt.root, quality: evt.quality, duration: eventDuration(evt) }
-        : { root: 'C', quality: '', duration: eventDuration(evt) }, staff);
+        ? { root: evt.root, quality: evt.quality, duration: eventDuration(evt), dotted: !!evt.dotted }
+        : { root: 'C', quality: '', duration: eventDuration(evt), dotted: !!evt.dotted }, staff);
     }
   }
 
@@ -2339,21 +2403,25 @@
       if (evt.kind === 'rest') {
         events.splice(evtIdx, 1);
       } else {
-        events[evtIdx] = { kind: 'rest', duration: eventDuration(evt) };
+        const restEvt = { kind: 'rest', duration: eventDuration(evt) };
+        if (evt.dotted) restEvt.dotted = true;
+        events[evtIdx] = restEvt;
       }
     } else {
       const mBeats = measureBeats(parseTime(sys.time));
       const remaining = mBeats - usedBeats(events);
       if (remaining <= 0) { showToast('Measure is full'); return; }
-      const dur = fitDurationToMeasure(state.duration, remaining);
-      events.push({ kind: 'rest', duration: dur });
+      const fitted = fitEventToMeasure(state.duration, state.dotted, remaining);
+      const restEvt = { kind: 'rest', duration: fitted.duration };
+      if (fitted.dotted) restEvt.dotted = true;
+      events.push(restEvt);
     }
     setMeasureIn(content, slot, events);
     save(); renderAll();
   }
 
   function openPicker(sysIdx, slot, evtIdx, seed, staff) {
-    seed = seed || { root: 'C', quality: '', duration: state.duration };
+    seed = seed || { root: 'C', quality: '', duration: state.duration, dotted: state.dotted };
     staff = staff || 'treble';
     const sys = state.systems[sysIdx];
     const content = systemContent(sys, staff);
@@ -2361,7 +2429,7 @@
     const existingEvt = evtIdx != null ? events[evtIdx] : null;
     picker = {
       sysIdx: sysIdx, slot: slot, evtIdx: evtIdx, staff: staff,
-      root: seed.root, quality: seed.quality, duration: seed.duration,
+      root: seed.root, quality: seed.quality, duration: seed.duration, dotted: !!seed.dotted,
       isNew: evtIdx == null,
     };
     pickerSub.textContent = (existingEvt
@@ -2404,7 +2472,7 @@
     const pickerContent = systemContent(sys, picker.staff || 'treble');
     const mBeats = measureBeats(parseTime(sys.time));
     const otherBeats = usedBeats(measureEvents(pickerContent[picker.slot])) - (picker.evtIdx != null
-      ? DURATIONS[eventDuration(measureEvents(pickerContent[picker.slot])[picker.evtIdx])].beats
+      ? eventBeats(measureEvents(pickerContent[picker.slot])[picker.evtIdx])
       : 0);
     const availableBeats = mBeats - Math.max(0, otherBeats);
     const dRow = document.getElementById('duration-row');
@@ -2412,7 +2480,7 @@
     DURATION_ORDER.forEach(function (d) {
       const b = document.createElement('button');
       b.type = 'button';
-      const fits = DURATIONS[d].beats <= availableBeats + 1e-6;
+      const fits = durationBeats(d, picker.dotted) <= availableBeats + 1e-6;
       b.className = 'picker-btn quality' + (d === picker.duration ? ' selected' : '');
       b.disabled = !fits;
       b.style.opacity = fits ? '' : '0.4';
@@ -2422,9 +2490,22 @@
       if (fits) b.addEventListener('click', function () { picker.duration = d; renderPicker(); });
       dRow.appendChild(b);
     });
-    if (DURATIONS[picker.duration].beats > availableBeats + 1e-6) {
-      picker.duration = fitDurationToMeasure(picker.duration, availableBeats);
-    }
+    // Dotted toggle: inline with the duration row, disabled when 1.5x wouldn't fit.
+    const dotBtn = document.createElement('button');
+    dotBtn.type = 'button';
+    const dottedFits = durationBeats(picker.duration, true) <= availableBeats + 1e-6;
+    const dotActive = !!picker.dotted && dottedFits;
+    dotBtn.className = 'picker-btn quality' + (dotActive ? ' selected' : '');
+    dotBtn.disabled = !dottedFits;
+    dotBtn.style.opacity = dottedFits ? '' : '0.4';
+    dotBtn.style.cursor = dottedFits ? 'pointer' : 'not-allowed';
+    dotBtn.setAttribute('aria-pressed', dotActive ? 'true' : 'false');
+    dotBtn.innerHTML = '<span style="font-weight:700; font-size:18px; margin-right:4px;">·</span>dotted';
+    if (dottedFits) dotBtn.addEventListener('click', function () { picker.dotted = !picker.dotted; renderPicker(); });
+    dRow.appendChild(dotBtn);
+    const fittedPick = fitEventToMeasure(picker.duration, !!picker.dotted, availableBeats);
+    picker.duration = fittedPick.duration;
+    picker.dotted = fittedPick.dotted;
     previewName.textContent = chordName(picker.root, picker.quality);
     renderMiniStaff(previewSvg, picker.root, picker.quality, picker.staff || 'treble');
   }
@@ -2518,7 +2599,7 @@
             const measureStart = sysStart + i * mBeats;
             let beatCursor = 0;
             events.forEach(function (evt, evtIdx) {
-              const b = DURATIONS[eventDuration(evt)].beats;
+              const b = eventBeats(evt);
               scheduled.push({
                 sysIdx: sysIdx, slotIdx: i, evtIdx: evtIdx, staff: f.staff, clef: f.clef,
                 evt: evt, beats: b, startBeat: measureStart + beatCursor,
@@ -2625,12 +2706,12 @@
           const labelSize = Math.max(12, Math.min(21, alloc * 0.45));
           const e = it.evt;
           if (e.kind === 'chord') {
-            drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+            drawNotesCluster(g, chordNotes(e.root, e.quality, f.clef), cx, chordName(e.root, e.quality), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), dotted: !!e.dotted, labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'notes') {
             const expanded = (e.notes || []).map(function (n) { return expandNote(n, f.clef); });
-            drawNotesCluster(g, expanded, cx, noteLabels(applyKeyToNotes(expanded, staffKey(sys, f.staff))), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
+            drawNotesCluster(g, expanded, cx, noteLabels(applyKeyToNotes(expanded, staffKey(sys, f.staff))), { colorInk: colors.staff, colorAccent: colors.accent, duration: eventDuration(e), dotted: !!e.dotted, labelSize: labelSize, bottomY: f.bottomY, labelY: f.labelY });
           } else if (e.kind === 'rest') {
-            drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff });
+            drawRest(g, cx, eventDuration(e), { topY: f.topY, bottomY: f.bottomY, colorInk: colors.staff, dotted: !!e.dotted });
           }
         });
       }
@@ -2727,15 +2808,18 @@
     if (evtIdx == null) {
       const remaining = mBeats - usedBeats(events);
       if (remaining <= 0) { showToast('Measure is full'); return; }
-      const dur = fitDurationToMeasure(state.duration, remaining);
+      const fitted = fitEventToMeasure(state.duration, state.dotted, remaining);
       const noteRec = { position: position, accidental: placedAcc };
-      events.push({ kind: 'notes', notes: [noteRec], duration: dur });
+      const noteEvt = { kind: 'notes', notes: [noteRec], duration: fitted.duration };
+      if (fitted.dotted) noteEvt.dotted = true;
+      events.push(noteEvt);
       addedNote = noteRec;
     } else {
       const evt = events[evtIdx];
       if (!evt) return;
       let notes;
       let duration = eventDuration(evt);
+      const wasDotted = !!evt.dotted;
       if (evt.kind === 'notes') {
         notes = (evt.notes || []).slice();
       } else {
@@ -2755,7 +2839,9 @@
       if (notes.length === 0) {
         events.splice(evtIdx, 1);
       } else {
-        events[evtIdx] = { kind: 'notes', notes: notes, duration: duration };
+        const updated = { kind: 'notes', notes: notes, duration: duration };
+        if (wasDotted) updated.dotted = true;
+        events[evtIdx] = updated;
       }
     }
     setMeasureIn(content, slot, events);
@@ -2821,9 +2907,12 @@
     const events = measureEvents(content[picker.slot]).slice();
     const mBeats = measureBeats(parseTime(sys.time));
     const newEvt = { kind: 'chord', root: picker.root, quality: picker.quality, duration: picker.duration };
+    if (picker.dotted) newEvt.dotted = true;
     if (picker.evtIdx == null) {
       const remaining = mBeats - usedBeats(events);
-      newEvt.duration = fitDurationToMeasure(newEvt.duration, remaining);
+      const fitted = fitEventToMeasure(newEvt.duration, !!newEvt.dotted, remaining);
+      newEvt.duration = fitted.duration;
+      if (fitted.dotted) newEvt.dotted = true; else delete newEvt.dotted;
       events.push(newEvt);
     } else {
       events[picker.evtIdx] = newEvt;
@@ -2831,8 +2920,10 @@
       for (let i = 0; i < events.length; i++) {
         const remaining = mBeats - acc;
         if (remaining <= 0) { events.length = i; break; }
-        events[i].duration = fitDurationToMeasure(eventDuration(events[i]), remaining);
-        acc += DURATIONS[eventDuration(events[i])].beats;
+        const fitted = fitEventToMeasure(eventDuration(events[i]), !!events[i].dotted, remaining);
+        events[i].duration = fitted.duration;
+        if (fitted.dotted) events[i].dotted = true; else delete events[i].dotted;
+        acc += eventBeats(events[i]);
       }
     }
     setMeasureIn(content, picker.slot, events);
@@ -2926,6 +3017,11 @@
       state.duration = b.getAttribute('data-dur'); save(); renderAll();
     });
   });
+  document.querySelectorAll('.modifier-group [data-dot]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      state.dotted = !state.dotted; save(); renderAll();
+    });
+  });
 
   document.getElementById('btn-download').addEventListener('click', async function () {
     try {
@@ -2988,6 +3084,7 @@
     if (parsed.mode === 'chord' || parsed.mode === 'notes' || parsed.mode === 'rests') state.mode = parsed.mode;
     if (typeof parsed.accidental === 'number') state.accidental = parsed.accidental;
     if (parsed.duration && DURATIONS[parsed.duration]) state.duration = parsed.duration;
+    if (typeof parsed.dotted === 'boolean') state.dotted = parsed.dotted;
     if (parsed.key && KEYS[parsed.key]) state.key = parsed.key;
     if (Array.isArray(parsed.systems) && parsed.systems.length) {
       state.systems = parsed.systems.map(function (s) {
@@ -3143,6 +3240,7 @@
         const note = { letter: SHARP_LETTERS[pc], accidental: SHARP_ACC[pc], octave: octave };
         // Scale duration slightly with velocity; 1.2s feels natural
         synth.playNotes([note], 0, 1.2);
+        if (typeof remote !== 'undefined' && remote.onLocalMidiNote) remote.onLocalMidiNote(note, 1.2);
       }
       // Note-off intentionally ignored; the piano voice decays naturally.
     }
@@ -3206,6 +3304,21 @@
         'playback.isPlaying': false,
       }).catch(function () {});
     },
+    onLocalMidiNote: function (note, duration) {
+      if (this.role !== 'teacher' || !fbDb || !this.sessionCode) return;
+      const payload = {
+        note: note,
+        duration: duration || 1.2,
+        voice: synth.voice,
+        nonce: Math.random().toString(36).slice(2, 10) + Date.now().toString(36),
+      };
+      console.log('[live] teacher → liveNote', payload);
+      fbDb.collection('sessions').doc(this.sessionCode).update({ liveNote: payload })
+        .catch(function (e) {
+          console.warn('live note push failed', e);
+          showToast('Live note blocked: ' + (e && e.code ? e.code : e.message || 'error'));
+        });
+    },
     generateCode: function () {
       const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
       let c = '';
@@ -3254,6 +3367,7 @@
       this.teacherName = data.teacherName || 'Teacher';
       this.sessionCode = code;
       this.role = 'student';
+      this._lastLiveNonce = (data.liveNote && data.liveNote.nonce) || null;
       this.applying = true;
       if (data.state) applyRemoteState(data.state);
       this.applying = false;
@@ -3282,6 +3396,16 @@
             self.lastWrittenJson = incoming;
             self.applying = false;
           }
+        }
+        if (self.role === 'student' && d.liveNote && d.liveNote.nonce && d.liveNote.nonce !== self._lastLiveNonce) {
+          console.log('[live] student ← liveNote', d.liveNote);
+          self._lastLiveNonce = d.liveNote.nonce;
+          try {
+            if (d.liveNote.voice) synth.setVoice(d.liveNote.voice);
+            const ctx = synth.ensure();
+            console.log('[live] AudioContext state:', ctx && ctx.state);
+            synth.playNotes([d.liveNote.note], 0, d.liveNote.duration || 1.2);
+          } catch (e) { console.warn('[live] playNotes failed', e); }
         }
         if (self.role === 'student' && d.playback) {
           const want = !!d.playback.isPlaying;
@@ -3369,15 +3493,24 @@
       const userEl = document.getElementById('session-user');
       const leaveBtn = document.getElementById('session-leave-btn');
       const copyBtn = document.getElementById('session-copy-btn');
+      const codeWrap = codeEl.parentElement;
       if (this.role === 'solo') {
-        banner.hidden = true;
+        banner.hidden = false;
         document.body.setAttribute('data-role', 'solo');
+        chip.textContent = 'Solo';
+        chip.className = 'role-chip';
+        codeWrap.hidden = true;
+        copyBtn.hidden = true;
+        userEl.innerHTML = '<span style="color:var(--ink-mid)">Working on your own &mdash; local only</span>';
+        leaveBtn.hidden = false;
+        leaveBtn.textContent = 'Leave Solo';
         return;
       }
       banner.hidden = false;
       document.body.setAttribute('data-role', this.role);
       chip.textContent = this.role === 'teacher' ? 'Teacher' : 'Student';
       chip.className = 'role-chip ' + this.role;
+      codeWrap.hidden = false;
       codeEl.textContent = this.sessionCode || '—';
       if (this.role === 'teacher') {
         const n = this.studentsOnline;
@@ -3387,6 +3520,7 @@
         userEl.textContent = 'Watching ' + (this.teacherName || 'Teacher') + "'s session";
       }
       leaveBtn.hidden = false;
+      leaveBtn.textContent = 'Leave';
       copyBtn.hidden = this.role !== 'teacher';
     },
   };
@@ -3398,15 +3532,59 @@
     const teacherBtn = document.getElementById('gate-teacher-btn');
     const studentBtn = document.getElementById('gate-student-btn');
     const soloBtn = document.getElementById('gate-solo-btn');
-    const codeInput = document.getElementById('gate-code-input');
+    const soloBtn2 = document.getElementById('gate-solo-btn-2');
+    const defaultCols = document.getElementById('gate-cols-default');
+    const inviteCols = document.getElementById('gate-cols-invite');
+    const inviteCodeEl = document.getElementById('gate-invite-code');
+    const gateSub = document.getElementById('gate-sub');
+
+    function getInviteCode() {
+      try {
+        const u = new URL(location.href);
+        let c = u.searchParams.get('s') || u.searchParams.get('session') || '';
+        c = (c || '').toUpperCase().trim();
+        return /^[A-Z0-9]{6}$/.test(c) ? c : null;
+      } catch (e) { return null; }
+    }
+    function clearInviteFromUrl() {
+      try {
+        const u = new URL(location.href);
+        u.searchParams.delete('s');
+        u.searchParams.delete('session');
+        history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+      } catch (e) {}
+    }
+    function shareLink(code) {
+      try {
+        const u = new URL(location.href);
+        u.searchParams.set('s', code);
+        u.hash = '';
+        return u.toString();
+      } catch (e) { return location.href + '?s=' + code; }
+    }
+    const invite = getInviteCode();
+    function applyMode() {
+      if (invite) {
+        defaultCols.hidden = true;
+        inviteCols.hidden = false;
+        inviteCodeEl.textContent = invite;
+        gateSub.textContent = 'You were invited to a session.';
+      } else {
+        defaultCols.hidden = false;
+        inviteCols.hidden = true;
+        gateSub.textContent = 'Start a session or work on your own.';
+      }
+    }
+    applyMode();
     function setErr(msg) { errEl.textContent = msg || ' '; }
     function closeGate() { gate.style.display = 'none'; }
     function openGate() {
       gate.style.display = '';
       setErr('');
-      codeInput.value = '';
       teacherBtn.disabled = !fbReady;
       studentBtn.disabled = !fbReady;
+      applyMode();
+      document.getElementById('session-banner').hidden = true;
     }
     // Let remote.leave() reopen the gate for both explicit Leave and teacher-ended-session.
     remote._openGate = openGate;
@@ -3427,7 +3605,8 @@
       try {
         await remote.teacherCreate();
         closeGate();
-        showToast('Session ' + remote.sessionCode + ' ready');
+        try { await navigator.clipboard.writeText(shareLink(remote.sessionCode)); } catch (e) {}
+        showToast('Session ready — share link copied');
       } catch (e) {
         setErr(e && e.message ? e.message : 'Sign-in failed');
       } finally { teacherBtn.disabled = false; }
@@ -3435,27 +3614,28 @@
     studentBtn.addEventListener('click', async function () {
       setErr('');
       studentBtn.disabled = true;
+      synth.ensure(); // warm AudioContext under the join gesture so live notes are audible
       try {
-        await remote.studentJoin(codeInput.value);
+        await remote.studentJoin(invite || '');
         closeGate();
+        clearInviteFromUrl();
         showToast('Joined session ' + remote.sessionCode);
       } catch (e) {
         setErr(e && e.message ? e.message : 'Could not join');
       } finally { studentBtn.disabled = false; }
     });
-    soloBtn.addEventListener('click', function () {
+    function goSolo() {
       remote.role = 'solo';
       remote._updateBanner();
       closeGate();
-    });
-    codeInput.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') studentBtn.click();
-    });
+    }
+    soloBtn.addEventListener('click', goSolo);
+    if (soloBtn2) soloBtn2.addEventListener('click', goSolo);
     document.getElementById('session-copy-btn').addEventListener('click', function () {
       if (!remote.sessionCode) return;
       try {
-        navigator.clipboard.writeText(remote.sessionCode);
-        showToast('Code copied');
+        navigator.clipboard.writeText(shareLink(remote.sessionCode));
+        showToast('Link copied');
       } catch (e) {}
     });
     document.getElementById('session-leave-btn').addEventListener('click', function () {
